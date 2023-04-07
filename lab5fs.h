@@ -3,7 +3,8 @@
 #include <linux/types.h>
 #define LAB5FS_BSIZE_BITS 10
 #define LAB5FS_BSIZE (1 << LAB5FS_BSIZE_BITS) /* 1024 bytes per block*/
-
+#define LAB5FS_ROOT_INO 2
+#define LAB5FS_INODES_PER_BLOCK 8
 #define LAB5FS_MAGIC 0xCAFED00D
 
 /* lab5fs superblock layout on disk */
@@ -35,6 +36,8 @@ struct lab5fs_inode
     unsigned short i_links_count; /* Links count */
     unsigned long i_blocks;       /* Blocks count */
     unsigned long i_flags;        /* File flags */
+    /* 36 bytes up till this point */
+    char padding[28]; /* pad up to 64 bytes */
 };
 /* lab5fs dentry layout on disk */
 struct lab5fs_dir_entry
@@ -47,8 +50,8 @@ struct lab5fs_dir_entry
 };
 enum
 {
-    EXT2_FT_UNKNOWN,
-    EXT2_FT_REG_FILE,
-    EXT2_FT_DIR,
+    LAB5FS_FT_UNKNOWN,
+    LAB5FS_FT_REG_FILE,
+    LAB5FS_FT_DIR,
 };
 #endif
