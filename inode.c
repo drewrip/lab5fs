@@ -12,13 +12,17 @@ void lab5fs_read_inode(struct inode *inode)
     struct lab5fs_inode *di;
     struct buffer_head *bh;
     int block, off;
-
+    if (!inode)
+    {
+        printk(KERN_ERR "lab5fs_read_inode: attempted to read NULL inode\n");
+        return;
+    }
     block = (ino - LAB5FS_ROOT_INO) / LAB5FS_INODES_PER_BLOCK + 1;
     bh = sb_bread(inode->i_sb, block);
     if (!bh)
     {
         /* yikes */
-        printf("couldn't read inode\n");
+        printk("couldn't read inode\n");
         return;
     }
 

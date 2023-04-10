@@ -29,7 +29,7 @@ int validate_image(const char *pathname, unsigned long *block_count)
 }
 int main(int argc, char *argv[])
 {
-    int fd, res;
+    int fd, res, cmp;
     unsigned long block_count, max_num_of_inodes;
     struct timespec now;
     struct lab5fs_super_block sb;
@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
     root_inode.i_gid = 0;
     root_inode.i_links_count = 1;
     root_inode.i_blocks = 1;
-    if (lseek(fd, offset, SEEK_SET) < 0)
+    if ((cmp = lseek(fd, offset, SEEK_SET)) < 0 || cmp != offset)
     {
         fprintf(stderr, "Couldn't return to the right offset in file descriptor\n");
         exit(EXIT_FAILURE);

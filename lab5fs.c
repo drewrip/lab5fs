@@ -8,36 +8,78 @@
 MODULE_LICENSE("GPL");
 void lab5fs_read_inode(struct inode *inode)
 {
+	unsigned long ino = inode->i_ino;
+	struct lab5fs_inode *di;
+	struct buffer_head *bh;
+	int block, off;
+	printk("lab5fs_read_inode (debug): reading inode\n");
+	if (!inode)
+	{
+		printk("lab5fs_read_inode: attempted to read NULL inode\n");
+		return;
+	}
+	block = (ino - LAB5FS_ROOT_INO) / LAB5FS_INODES_PER_BLOCK + 1;
+	bh = sb_bread(inode->i_sb, block);
+	if (!bh)
+	{
+		/* yikes */
+		printk("couldn't read inode\n");
+		return;
+	}
+
+	off = (ino - LAB5FS_ROOT_INO) % LAB5FS_INODES_PER_BLOCK;
+	di = (struct lab5fs_inode *)bh->b_data + off;
+
+	inode->i_mode = 0x0000FFFF & di->i_mode;
+	// if (di->i_vtype == LAB5FS_FT_DIR)
+	// {
+	// 	inode->i_mode |= S_IFDIR;
+	// 	inode->i_op = &lab5fs_dir_inops;
+	// 	inode->i_fop = &lab5fs_dir_operations;
+	// }
+	// else if (di->i_vtype == LAB5FS_FT_REG_FILE)
+	// {
+	// 	inode->i_mode |= S_IFREG;
+	// 	inode->i_op = &lab5fs_file_inops;
+	// 	inode->i_fop = &lab5fs_file_operations;
+	// 	inode->i_mapping->a_ops = &lab5fs_aops;
+	// }
+
+	inode->i_uid = di->i_uid;
+	inode->i_gid = di->i_gid;
+	inode->i_size = di->i_size;
+	inode->i_blocks = di->i_blocks;
+	inode->i_atime.tv_sec = di->i_atime;
+	inode->i_mtime.tv_sec = di->i_mtime;
+	inode->i_ctime.tv_sec = di->i_ctime;
+	inode->i_atime.tv_nsec = di->i_atime;
+	inode->i_mtime.tv_nsec = di->i_mtime;
+	inode->i_ctime.tv_nsec = di->i_ctime;
+
+	brelse(bh);
+	printk("lab5fs_read_inode (debug): done reading inode\n");
 }
-int lab5fs_write_inode(struct inode *inode, int wait)
-{
-	return 0;
-}
-void lab5fs_delete_inode(struct inode *inode)
-{
-}
-static struct inode *lab5fs_alloc_inode(struct super_block *sb)
-{
-	struct inode *n = NULL;
-	return n;
-}
-static void lab5fs_destroy_inode(struct inode *inode)
+// int lab5fs_write_inode(struct inode *inode, int wait)
+// {
+// 	return 0;
+// }
+// void lab5fs_delete_inode(struct inode *inode)
+// {
+// }
+
+static void lab5fs_clear_inode(struct inode *inode)
 {
 }
 static void lab5fs_put_super(struct super_block *sb)
 {
 }
-static void lab5fs_write_super(struct super_block *sb)
-{
-}
-static struct super_operations lab5fs_sops = {
-	.alloc_inode = lab5fs_alloc_inode,
-	.destroy_inode = lab5fs_destroy_inode,
+// static void lab5fs_write_super(struct super_block *sb)
+// {
+// }
+struct super_operations lab5fs_sops = {
 	.read_inode = lab5fs_read_inode,
-	.write_inode = lab5fs_write_inode,
-	.delete_inode = lab5fs_delete_inode,
+	.clear_inode = lab5fs_clear_inode,
 	.put_super = lab5fs_put_super,
-	.write_super = lab5fs_write_super,
 };
 static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 {
@@ -74,19 +116,19 @@ static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 	}
 	sb->s_magic = LAB5FS_MAGIC;
 	sb->s_op = &lab5fs_sops;
-	// root_inode = iget(sb, 2);
-	// if (!root_inode)
-	// {
-	// 	printk("lab5fs (debug): failed iget.\n");
-	// 	goto failed_mount;
-	// }
-	// sb->s_root = d_alloc_root(root_inode);
-	// if (!sb->s_root)
-	// {
-	// 	printk("lab5fs (debug): failed d_alloc_root.\n");
-	// 	iput(root_inode);
-	// 	goto failed_mount;
-	// }
+	root_inode = iget(sb, 0);
+	if (!root_inode)
+	{
+		printk("lab5fs (debug): failed iget.\n");
+		goto failed_mount;
+	}
+	sb->s_root = d_alloc_root(root_inode);
+	if (!sb->s_root)
+	{
+		printk("lab5fs (debug): failed d_alloc_root.\n");
+		iput(root_inode);
+		goto failed_mount;
+	}
 	printk("lab5fs (debug): leaving lab5fs_fill_super.\n");
 	return 0;
 
