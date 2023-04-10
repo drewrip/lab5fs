@@ -28,7 +28,9 @@ int validate_image(const char *pathname)
 int main(int argc, char *argv[])
 {
     int fd, res;
+    struct timespec now;
     struct lab5fs_super_block sb;
+    struct lab5fs_inode root_inode;
     off_t offset = 0;
 
     // Check arguments
@@ -60,19 +62,36 @@ int main(int argc, char *argv[])
     // Write super block to device or file
     if ((res = write(fd, &sb, sizeof(sb))) < 0)
     {
-        fprintf(stderr, "Couldn't write to device and received error number %d\n", res);
+        fprintf(stderr, "Couldn't write super block to device and received error number %d\n", res);
         exit(EXIT_FAILURE);
     }
     /* Update offset for next read*/
     offset += res;
+    printf("Finished writing %lu bytes to device\n", res);
     /* Initialize root inode */
-    // struct lab5fs_inode inode;
-    // memset(&inode, 0, sizeof(inode));
-    // inode.i_mode = S_IFDIR | 0755;
-    // inode.i_size = LAB5FS_BSIZE;
-    // inode.i_blocks = 1;
-    //  fseek(file, 2 * LAB5FS_BSIZE, SEEK_SET);
-    //  fwrite(&inode, 1, sizeof(inode), file);
+    memset(&root_inode, 0, sizeof(root_inode));
+    root_inode.i_mode = S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+    root_inode.i_uid = 0;
+    root_inode.i_size = 0;
+    now.tv_sec = time(NULL);
+    root_inode.i_atime = now.tv_sec;
+    root_inode.i_ctime = now.tv_sec;
+    root_inode.i_mtime = 0;
+    root_inode.i_dtime = 0;
+    root_inode.i_gid = 0;
+    root_inode.i_links_count = 1;
+    root_inode.i_blocks = 1;
+    if (lseek(fd, offset, SEEK_SET) < 0)
+    {
+        fprintf(stderr, "Couldn't return to the right offset in file descriptor\n");
+        exit(EXIT_FAILURE);
+    }
+    // Write root inode to device or file
+    if ((res = write(fd, &root_inode, sizeof(root_inode))) < 0)
+    {
+        fprintf(stderr, "Couldn't write root indoe to device and received error number %d\n", res);
+        exit(EXIT_FAILURE);
+    }
     if ((res = close(fd)) < 0)
     {
         fprintf(stderr, "Couldn't close device and received error number %d\n", res);
