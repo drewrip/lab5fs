@@ -1,11 +1,12 @@
 #ifndef _LAB5FS_FS_H
 #define _LAB5FS_FS_H
 #include <linux/types.h>
+#include <linux/fs.h>
 #define LAB5FS_BSIZE_BITS 10
 #define LAB5FS_BSIZE (1 << LAB5FS_BSIZE_BITS) /* 1024 bytes per block*/
-#define LAB5FS_ROOT_INO 2
 #define LAB5FS_INODES_PER_BLOCK 8
 #define LAB5FS_MAGIC 0xCAFED00D
+#define LAB5FS_ROOT_INO 1
 
 /* lab5fs superblock layout on disk */
 struct lab5fs_super_block
@@ -16,7 +17,7 @@ struct lab5fs_super_block
     unsigned long s_free_blocks_count; /* Free blocks count */
     unsigned long s_free_inodes_count; /* Free inodes count */
     unsigned long s_first_data_block;  /* First Data Block */
-    unsigned long s_log_block_size;    /* Block size */
+    unsigned long s_block_size;        /* Block size */
 
     unsigned short s_state;      /* File system state */
     unsigned short s_inode_size; /* size of inode structure */
@@ -54,4 +55,17 @@ enum
     LAB5FS_FT_REG_FILE,
     LAB5FS_FT_DIR,
 };
+#define BFS_FILESIZE(ip) \
+    ((ip)->i_sblock == 0 ? 0 : BFS_NZFILESIZE(ip))
+
+#define BFS_FILEBLOCKS(ip) \
+    ((ip)->i_sblock == 0 ? 0 : ((ip)->i_eblock + 1) - (ip)->i_sblock)
+
+struct lab5fs_sb_info
+{
+};
+/* super.c */
+
+/* inode.c */
+
 #endif
