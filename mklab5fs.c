@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <string.h>
 #include "lab5fs.h"
-int validate_image(const char *pathname)
+int validate_image(const char *pathname, unsigned long *block_count)
 {
     struct stat image_stat;
     int res;
@@ -17,6 +17,8 @@ int validate_image(const char *pathname)
         fprintf(stderr, "Could populate stat struct and recevied error number %d\n", res);
         return res;
     }
+    /* Let's get the number blocks in the device */
+    *block_count = image_stat.st_size / LAB5FS_BSIZE;
     /* Ensure image has right permissions */
     if (res = access(pathname, W_OK))
     {
@@ -28,9 +30,11 @@ int validate_image(const char *pathname)
 int main(int argc, char *argv[])
 {
     int fd, res;
+    unsigned long block_count, max_num_of_inodes;
     struct timespec now;
     struct lab5fs_super_block sb;
     struct lab5fs_inode root_inode;
+
     off_t offset = 0;
 
     // Check arguments
@@ -39,8 +43,13 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Usage: %s <device or file>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
-    if (validate_image(argv[1]))
+    /* Validate image/device and obtain the number of blocks in the image */
+    if (validate_image(argv[1], &block_count))
         exit(EXIT_FAILURE);
+    /* Obtain the max number of nodes for this device.
+     * Will need to change block_count - 1
+     * based on how many blocks are used for other purposes than inodes */
+    max_num_of_inodes = (block_count / sizeof(struct lab5fs_inode) * (block_count - 1));
     // Open device or file
     fd = open(argv[1], O_WRONLY);
     if (fd < 0)
@@ -54,10 +63,10 @@ int main(int argc, char *argv[])
     sb.s_magic = LAB5FS_MAGIC;
     sb.s_block_size = LAB5FS_BSIZE;
     sb.s_inode_size = sizeof(struct lab5fs_inode);
-    sb.s_blocks_count = 3;
-    sb.s_inodes_count = 5;
-    sb.s_free_inodes_count = 4;
-    sb.s_free_blocks_count = 2;
+    sb.s_blocks_count = block_count;
+    sb.s_inodes_count = max_num_of_inodes;
+    sb.s_free_inodes_count = max_num_of_inodes - 1;
+    sb.s_free_blocks_count = block_count - 1;
 
     // Write super block to device or file
     if ((res = write(fd, &sb, sizeof(sb))) < 0)
