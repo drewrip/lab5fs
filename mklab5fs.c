@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
     }
     /* Update offset for next read*/
     offset += res;
-    printf("Finished writing %lu bytes to device\n", res);
+    printf("Finished writing %lu bytes to device's superblock\n", res);
     /* Initialize root inode */
     memset(&root_inode, 0, sizeof(root_inode));
     root_inode.i_mode = S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
@@ -95,12 +95,15 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Couldn't return to the right offset in file descriptor\n");
         exit(EXIT_FAILURE);
     }
+    /* Update offset for next read*/
+    offset += res;
     // Write root inode to device or file
     if ((res = write(fd, &root_inode, sizeof(root_inode))) < 0)
     {
         fprintf(stderr, "Couldn't write root indoe to device and received error number %d\n", res);
         exit(EXIT_FAILURE);
     }
+    printf("Finished writing %lu bytes to device's root inode\n", res);
     if ((res = close(fd)) < 0)
     {
         fprintf(stderr, "Couldn't close device and received error number %d\n", res);
