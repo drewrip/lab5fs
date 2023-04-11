@@ -1,12 +1,11 @@
 #ifndef _LAB5FS_FS_H
 #define _LAB5FS_FS_H
-#include <linux/types.h>
-#include <linux/fs.h>
 #define LAB5FS_BSIZE_BITS 10
 #define LAB5FS_BSIZE (1 << LAB5FS_BSIZE_BITS) /* 1024 bytes per block*/
 #define LAB5FS_INODES_PER_BLOCK 8
 #define LAB5FS_MAGIC 0xCAFED00D
 #define LAB5FS_ROOT_INO 1
+#include <linux/types.h>
 
 /* lab5fs superblock layout on disk */
 struct lab5fs_super_block

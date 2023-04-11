@@ -6,6 +6,52 @@
 #include "lab5fs.h"
 
 MODULE_LICENSE("GPL");
+static int
+lab5fs_readdir(struct file *filp, void *dirent, filldir_t filldir)
+{
+	/** TODO: Complete function*/
+	printk("Inside ext2_readdir\n");
+	return 0;
+}
+static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidata *nd)
+{
+	/** TODO: Complete function*/
+	printk("Inside lab5fs_create\n");
+	return 0;
+}
+static int lab5fs_unlink(struct inode *dir, struct dentry *dentry)
+{
+	/** TODO: Complete function*/
+	printk("Inside lab5fs_unlink\n");
+	return 0;
+}
+static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
+{
+	/** TODO: Complete function*/
+	printk("Inside lab5fs_lookup\n");
+	return dentry;
+}
+/** TODO: Revisit operation structs to add/remove functionalites as needed */
+static struct inode_operations lab5fs_file_inops = {
+	.create = lab5fs_create,
+	.unlink = lab5fs_unlink,
+	.lookup = lab5fs_lookup,
+};
+static struct file_operations lab5fs_file_operations = {
+	.llseek = generic_file_llseek,
+	.read = generic_file_read,
+	.write = generic_file_write,
+	.mmap = generic_file_mmap,
+	.open = generic_file_open,
+};
+
+static struct file_operations lab5fs_dir_operations = {
+	.readdir = lab5fs_readdir,
+};
+static struct address_space_operations lab5fs_aops = {
+
+};
+/** TODO: Clean up function and add/remove logic as needed */
 void lab5fs_read_inode(struct inode *inode)
 {
 	unsigned long ino = inode->i_ino;
@@ -19,18 +65,20 @@ void lab5fs_read_inode(struct inode *inode)
 		return;
 	}
 	block = (ino - LAB5FS_ROOT_INO) / LAB5FS_INODES_PER_BLOCK + 1;
-	bh = sb_bread(inode->i_sb, block);
+	bh = sb_bread(inode->i_sb, 1);
 	if (!bh)
 	{
-		/* yikes */
-		printk("couldn't read inode\n");
+		printk(KERN_ERR "lab5fs_read_inode: sb_bread returned null for block sector\n");
 		return;
 	}
 
 	off = (ino - LAB5FS_ROOT_INO) % LAB5FS_INODES_PER_BLOCK;
-	di = (struct lab5fs_inode *)bh->b_data + off;
+	di = (struct lab5fs_inode *)bh->b_data;
 
-	inode->i_mode = 0x0000FFFF & di->i_mode;
+	inode->i_mode = di->i_mode;
+	printk("lab5fs_read_inode: inode->i_mode is 0x%x, di->i_mode is 0x%x, and initialized mode is 0x%x\n", inode->i_mode, di->i_mode, S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+	/**** TODO: add type for inode*/
+
 	// if (di->i_vtype == LAB5FS_FT_DIR)
 	// {
 	// 	inode->i_mode |= S_IFDIR;
@@ -55,6 +103,12 @@ void lab5fs_read_inode(struct inode *inode)
 	inode->i_atime.tv_nsec = di->i_atime;
 	inode->i_mtime.tv_nsec = di->i_mtime;
 	inode->i_ctime.tv_nsec = di->i_ctime;
+	inode->i_op = &lab5fs_file_inops;
+	inode->i_fop = &lab5fs_dir_operations;
+	inode->i_mapping->a_ops = &lab5fs_aops;
+
+	// if (!inode->i_ino)
+	// inode->i_mode |= S_IFDIR;
 
 	brelse(bh);
 	printk("lab5fs_read_inode (debug): done reading inode\n");
@@ -69,9 +123,11 @@ void lab5fs_read_inode(struct inode *inode)
 
 static void lab5fs_clear_inode(struct inode *inode)
 {
+	printk("Inside lab5fs_clear_inode\n");
 }
 static void lab5fs_put_super(struct super_block *sb)
 {
+	printk("Inside lab5fs_put_super\n");
 }
 // static void lab5fs_write_super(struct super_block *sb)
 // {
@@ -81,6 +137,7 @@ struct super_operations lab5fs_sops = {
 	.clear_inode = lab5fs_clear_inode,
 	.put_super = lab5fs_put_super,
 };
+
 static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 {
 	struct buffer_head *bh;
@@ -116,6 +173,9 @@ static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 	}
 	sb->s_magic = LAB5FS_MAGIC;
 	sb->s_op = &lab5fs_sops;
+	sb->s_blocksize = LAB5FS_BSIZE;
+	sb->s_blocksize_bits = LAB5FS_BSIZE_BITS;
+	sb->s_maxbytes = (((unsigned long long)1) << 32) - 1;
 	root_inode = iget(sb, 0);
 	if (!root_inode)
 	{
@@ -130,6 +190,7 @@ static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 		goto failed_mount;
 	}
 	printk("lab5fs (debug): leaving lab5fs_fill_super.\n");
+
 	return 0;
 
 /* Handlers for fails */

@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
      * based on how many blocks are used for other purposes than inodes */
     max_num_of_inodes = (block_count / sizeof(struct lab5fs_inode) * (block_count - 1));
     // Open device or file
-    fd = open(argv[1], O_WRONLY);
+    fd = open(argv[1], O_WRONLY | O_EXCL);
     if (fd < 0)
     {
         fprintf(stderr, "Couldn't open specified device and received error number %d\n", fd);
