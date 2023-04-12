@@ -65,7 +65,8 @@ void lab5fs_read_inode(struct inode *inode)
 		return;
 	}
 	block = (ino - LAB5FS_ROOT_INO) / LAB5FS_INODES_PER_BLOCK + 1;
-	bh = sb_bread(inode->i_sb, 3);
+	/* Get corrersponding block number to the inode number so that we read from the right place */
+	bh = sb_bread(inode->i_sb, ((ino * sizeof(struct lab5fs_inode)) / LAB5FS_BSIZE) + INODE_TABLE_BLOCK_NO);
 	if (!bh)
 	{
 		printk(KERN_ERR "lab5fs_read_inode: sb_bread returned null for block sector\n");
