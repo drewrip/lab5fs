@@ -6,7 +6,6 @@
 #define LAB5FS_MAGIC 0xCAFED00D
 #define LAB5FS_ROOT_INO 1
 #define INODE_TABLE_BLOCK_NO 3
-#define INODE_TABLE_BLOCK_NO 3
 #include <linux/types.h>
 
 /* lab5fs superblock layout on disk */

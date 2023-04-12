@@ -44,7 +44,26 @@ static struct file_operations lab5fs_file_operations = {
 	.mmap = generic_file_mmap,
 	.open = generic_file_open,
 };
-
+static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
+{
+	struct inode *d_ino = flip->f_dentry->d_inode;
+	struct buffer_head *bh;
+	struct lab5fs_dir_entry *lab5fs_dentry;
+	unsigned int offset;
+	loff_t f_pos = filp->f_pos;
+	int block;
+	/* Ensure that we don't read pased the boundary of a dir entry */
+	if (f_pos & (sizeof(lab5fs_dir_entry) - 1))
+	{
+		printk("lab5fs_readdir: attempted to read beyond file\n");
+		return -1;
+	}
+	/* Start reading the dentries corresponding to the inode */
+	while (f_pos < d_ino->i_size)
+	{
+	}
+	return 0;
+}
 static struct file_operations lab5fs_dir_operations = {
 	.readdir = lab5fs_readdir,
 };
