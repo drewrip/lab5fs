@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <string.h>
 #include "lab5fs.h"
+
 int validate_image(const char *pathname, unsigned long *block_count)
 {
     struct stat image_stat;
@@ -67,6 +68,7 @@ int main(int argc, char *argv[])
     sb.s_inodes_count = max_num_of_inodes;
     sb.s_free_inodes_count = max_num_of_inodes - 1;
     sb.s_free_blocks_count = block_count - 1;
+    lab5fs_bitmap data_block_bitmap, inode_bitmap;
 
     // Write super block to device or file
     if ((res = write(fd, &sb, sizeof(sb))) < 0)
@@ -74,9 +76,36 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Couldn't write super block to device and received error number %d\n", res);
         exit(EXIT_FAILURE);
     }
-    /* Update offset for next read*/
+    /* Update offset for next write*/
     offset += res;
     printf("Finished writing %lu bytes to device's superblock\n", res);
+    /*  Initialize and write data block bitmap to device */
+    /*  We need to ensure that data block bitmap can map all data blocks,
+     *  so perform check LAB5FS_BLOCK_SIZE * 8 < TOTAL_NUM_OF_DATA_BLOCKS
+     *  TODO: account for number of data blocks greater than LAB5FS_BLOCK_SIZE * 8
+     *  and factor-in the number of blocks needed for the inode-table
+     */
+    memset(&data_block_bitmap, 0, sizeof(data_block_bitmap));
+    if ((res = write(fd, &data_block_bitmap, sizeof(data_block_bitmap))) < 0)
+    {
+        fprintf(stderr, "Couldn't write data block bitmap to device and received error number %d\n", res);
+        exit(EXIT_FAILURE);
+    }
+    /* Update offset for next write*/
+    offset += res;
+    printf("Finished writing %lu bytes to device's data block bitmap\n", res);
+    /* Initialize and write inode bitmap to device */
+    memset(&inode_bitmap, 0, sizeof(inode_bitmap));
+    /* Set the first bit of the inode_bitmap for the root inode */
+    inode_bitmap.bitmap[0] |= 0x1;
+    if ((res = write(fd, &inode_bitmap, sizeof(inode_bitmap))) < 0)
+    {
+        fprintf(stderr, "Couldn't write inode bitmap to device and received error number %d\n", res);
+        exit(EXIT_FAILURE);
+    }
+    /* Update offset for next write*/
+    offset += res;
+    printf("Finished writing %lu bytes to device's inode bitmap\n", res);
     /* Initialize root inode */
     memset(&root_inode, 0, sizeof(root_inode));
     root_inode.i_mode = S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
@@ -95,7 +124,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Couldn't return to the right offset in file descriptor\n");
         exit(EXIT_FAILURE);
     }
-    /* Update offset for next read*/
+    /* Update offset for next write*/
     offset += res;
     // Write root inode to device or file
     if ((res = write(fd, &root_inode, sizeof(root_inode))) < 0)

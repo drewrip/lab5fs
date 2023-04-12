@@ -65,13 +65,13 @@ void lab5fs_read_inode(struct inode *inode)
 		return;
 	}
 	block = (ino - LAB5FS_ROOT_INO) / LAB5FS_INODES_PER_BLOCK + 1;
-	bh = sb_bread(inode->i_sb, 1);
+	bh = sb_bread(inode->i_sb, 3);
 	if (!bh)
 	{
 		printk(KERN_ERR "lab5fs_read_inode: sb_bread returned null for block sector\n");
 		return;
 	}
-	
+
 	off = (ino - LAB5FS_ROOT_INO) % LAB5FS_INODES_PER_BLOCK;
 	di = (struct lab5fs_inode *)bh->b_data;
 

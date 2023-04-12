@@ -63,6 +63,12 @@ enum
 struct lab5fs_sb_info
 {
 };
+/* Define bitmap structure for lab5fs */
+typedef struct
+{
+    unsigned char bitmap[LAB5FS_BSIZE];
+} lab5fs_bitmap;
+
 /* super.c */
 
 /* inode.c */
