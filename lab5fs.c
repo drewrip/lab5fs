@@ -46,13 +46,13 @@ static struct file_operations lab5fs_file_operations = {
 };
 static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 {
-	struct inode *d_ino = flip->f_dentry->d_inode;
+	struct inode *d_ino = flip->f_dentry->inode;
 	struct buffer_head *bh;
 	struct lab5fs_dir_entry *lab5fs_dentry;
-	unsigned int offset;
-	loff_t f_pos = filp->f_pos;
-	int block;
-	/* Ensure that we don't read pased the boundary of a dir entry */
+	unsigned int b_offset;
+	loff_t f_pos = flip->f_pos;
+	int block_no;
+	/* Ensure that we don't read past the boundary of a dir entry */
 	if (f_pos & (sizeof(lab5fs_dir_entry) - 1))
 	{
 		printk("lab5fs_readdir: attempted to read beyond file\n");
@@ -61,6 +61,38 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 	/* Start reading the dentries corresponding to the inode */
 	while (f_pos < d_ino->i_size)
 	{
+		/* Calculate offset within a lab5fs block */
+		b_offset = f_pos & (LAB5FS_BSIZE - 1);
+		/* Obtain starting block number for dentries */
+		block_no = d_ino->u.generic_ip->i_sblock_dentries;
+		/* Let's read the block and begin dir reading */
+		bh = sb_bread(d_ino->i_sb, block_no);
+		/* Update file offset in the event that the block read failed */
+		if (!bh)
+		{
+			flip->f_pos += LAB5FS_BSIZE - b_offset;
+			continue;
+		}
+		/*  If we get here, it means that we can start performing the dir read.
+		 *  we also need to account for the possibility that the entries span over multiple blocks, so
+		 *  we perform the read over one block and go back to outer loop.
+		 */
+		do
+		{
+			lab5fs_dentry = (struct lab5fs_dir_entry *)(bh->b_data + b_offset);
+			/* Ensure that we don't read the root inode */
+			if (lab5fs_dentry->ino)
+			{
+				if (filldir(dirent, lab5fs_dentry->name, lab5fs_dentry->name_len, flip->f_pos, lab5fs_dentry->ino, DT_UNKNOWN) < 0)
+				{
+					brelse(bh);
+					return 0;
+				}
+			}
+			offset += le16_to_cpu(lab5fs_dentry->rec_len);
+			flip->f_pos += le16_to_cpu(lab5fs_dentry->rec_len);
+		} while (offset < LAB5FS_BSIZE && flip->f_pos < d_ino->i_size);
+		brelse(bh);
 	}
 	return 0;
 }

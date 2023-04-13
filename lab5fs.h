@@ -40,6 +40,13 @@ struct lab5fs_inode
     /* 36 bytes up till this point */
     char padding[28]; /* pad up to 64 bytes */
 };
+/*
+ * lab5fs in-memory inode info
+ */
+struct lab5fs_inode_info
+{
+    unsigned long i_sblock_dentries; /* Starting block of dir entries */
+};
 /* lab5fs dentry layout on disk */
 struct lab5fs_dir_entry
 {
@@ -69,7 +76,11 @@ typedef struct
 {
     unsigned char bitmap[LAB5FS_BSIZE];
 } lab5fs_bitmap;
-
+/* Define block allocation bitmap structure for dir entries in lab5fs */
+typedef struct
+{
+    unsigned long block_map[LAB5FS_BSIZE >> 2]; /* Maps 256 inodes in one block */
+} lab5fs_block_map;
 /* super.c */
 
 /* inode.c */
