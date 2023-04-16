@@ -70,7 +70,7 @@ struct lab5fs_dir_entry
     unsigned long inode;    /* Inode number */
     unsigned short rec_len; /* Directory entry length */
     __u8 namelen;           /* Name length */
-    char *file_type;
+    __u8 file_type;
     char name[MAX_FILE_NAME_LENGTH]; /* File name */
 };
 enum

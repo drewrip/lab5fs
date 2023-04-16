@@ -11,6 +11,7 @@ static int lab5fs_link(struct dentry *old_dentry, struct inode *dir,
 					   struct dentry *dentry);
 static int lab5fs_unlink(struct inode *dir, struct dentry *dentry);
 static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd);
+static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir);
 
 MODULE_LICENSE("GPL");
 static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
@@ -185,23 +186,37 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 	struct buffer_head *bh;
 	struct lab5fs_dir_entry *lab5fs_dentry;
 	struct lab5fs_inode_info *in_info;
-	unsigned int b_offset;
+	unsigned int b_offset = 0;
 	loff_t f_pos = flip->f_pos;
 	unsigned long block_no;
 	in_info = (struct lab5fs_inode_info *)(d_ino->u.generic_ip);
+	printk("Inside lab5fs_readdir where f_pos is %lld and d_ino->i_size is %llu\n", f_pos, d_ino->i_size);
 	/* Ensure that we don't read past the boundary of a dir entry */
-	if (f_pos & (sizeof(struct lab5fs_dir_entry) - 1))
+	if (flip->f_pos & (sizeof(struct lab5fs_dir_entry) - 1))
 	{
 		printk("lab5fs_readdir: attempted to read beyond file\n");
 		return -1;
 	}
+	// if (f_pos == 0)
+	// {
+	// 	filldir(dirent, ".", 1, flip->f_pos, d_ino->i_ino, DT_DIR);
+	// 	flip->f_pos++;
+	// }
+
+	// if (f_pos == 1)
+	// {
+	// 	filldir(dirent, "..", 2, flip->f_pos, d_ino->i_ino, DT_DIR);
+	// 	flip->f_pos++;
+	// }
 	/* Start reading the dentries corresponding to the inode */
-	while (f_pos < d_ino->i_size)
+	while (flip->f_pos < d_ino->i_size)
 	{
 		/* Calculate offset within a lab5fs block */
-		b_offset = f_pos & (LAB5FS_BSIZE - 1);
+		b_offset = flip->f_pos & (LAB5FS_BSIZE - 1);
+
 		/* Obtain starting block number for dentries */
 		block_no = in_info->i_sblock_dentries;
+		printk("block no is %lu\n", block_no);
 		/* Let's read the block and begin dir reading */
 		bh = sb_bread(d_ino->i_sb, block_no);
 		/* Update file offset in the event that the block read failed */
@@ -217,25 +232,33 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 		do
 		{
 			lab5fs_dentry = (struct lab5fs_dir_entry *)(bh->b_data + b_offset);
-			/* Ensure that we don't read the root inode */
-			if (lab5fs_dentry->inode)
+			/* Ensure that we don't read the empty dentries */
+			if (lab5fs_dentry->inode && lab5fs_dentry->rec_len)
 			{
+				// printk("lab5fs_readdir: calling filldir on name %s and inode %lu\n", lab5fs_dentry->name, lab5fs_dentry->inode);
 				if (filldir(dirent, lab5fs_dentry->name, lab5fs_dentry->namelen, flip->f_pos, lab5fs_dentry->inode, DT_UNKNOWN) < 0)
 				{
 					brelse(bh);
 					return 0;
 				}
+				b_offset += lab5fs_dentry->rec_len;
+				flip->f_pos += lab5fs_dentry->rec_len;
+				printk("lab5fs_readdir: done calling filldir and for inode %lu, name %s, namelen is %lu, and rec_len %lu\n", lab5fs_dentry->inode, lab5fs_dentry->name, lab5fs_dentry->namelen, lab5fs_dentry->rec_len);
 			}
-			b_offset += le16_to_cpu(lab5fs_dentry->rec_len);
-			flip->f_pos += le16_to_cpu(lab5fs_dentry->rec_len);
+			else
+			{
+				printk("lab5fs_readdir: skipped filldir with inode %lu\n", lab5fs_dentry->inode);
+				b_offset += sizeof(lab5fs_dentry);
+				flip->f_pos += sizeof(lab5fs_dentry);
+			}
+
 		} while (b_offset < LAB5FS_BSIZE && flip->f_pos < d_ino->i_size);
 		brelse(bh);
 	}
+	printk("Existing lab5fs_readdir\n");
 	return 0;
 }
-static struct file_operations lab5fs_dir_operations = {
-	.readdir = lab5fs_readdir,
-};
+
 static struct address_space_operations lab5fs_aops = {
 
 };
@@ -456,4 +479,9 @@ static struct file_operations lab5fs_file_operations = {
 	.write = generic_file_write,
 	.mmap = generic_file_mmap,
 	.open = generic_file_open,
+};
+struct file_operations lab5fs_dir_operations = {
+	.read = generic_read_dir,
+	.readdir = lab5fs_readdir,
+	.fsync = file_fsync,
 };

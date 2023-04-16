@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
     memset(&root_inode, 0, sizeof(root_inode));
     root_inode.i_mode = S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
     root_inode.i_uid = 0;
-    root_inode.i_size = 0;
+    root_inode.i_size = 24; // size of dentries
     now.tv_sec = time(NULL);
     root_inode.i_atime = now.tv_sec;
     root_inode.i_ctime = now.tv_sec;
@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
     }
     /* Update offset for next write*/
     offset += res;
-    printf("Finished writing %lu bytes to device's root dentry '.'\n", res);
+    printf("Finished writing %lu bytes to device's root inode\n", res);
     /* Update offset to write in data blocks, so skip inode tables */
     offset += (LAB5FS_BSIZE - res);
     if ((cmp = lseek(fd, offset, SEEK_SET)) < 0 || cmp != offset)
@@ -147,9 +147,10 @@ int main(int argc, char *argv[])
     }
     memset(&dentry, 0, sizeof(dentry));
     dentry.inode = 1;
-    dentry.namelen = strlen(".");
+    dentry.namelen = strlen(".") + 1;
     dentry.rec_len = REC_LEN_ALIGN_FOUR(dentry.namelen);
-    memcpy(dentry.name, ".", dentry.namelen);
+    dentry.file_type = 2;
+    strcpy(dentry.name, ".");
 
     // Write root dentry to device or file
     if ((res = write(fd, &dentry, dentry.rec_len)) < 0)
@@ -167,9 +168,10 @@ int main(int argc, char *argv[])
     }
     memset(&dentry, 0, sizeof(dentry));
     dentry.inode = 1;
-    dentry.namelen = strlen("..");
+    dentry.namelen = strlen("..") + 1;
     dentry.rec_len = REC_LEN_ALIGN_FOUR(dentry.namelen);
-    memcpy(dentry.name, "..", dentry.namelen);
+    dentry.file_type = 2;
+    strcpy(dentry.name, "..");
 
     // Write root dentry to device or file
     if ((res = write(fd, &dentry, dentry.rec_len)) < 0)
