@@ -8,6 +8,7 @@
 #define INODE_TABLE_BLOCK_NO 3
 #define INODE_BITMAP_BLOCK_NO 2
 #define MAX_FILE_NAME_LENGTH 255
+#define SIZE_OF_DIR_MINUS_NAME 8
 #include <linux/types.h>
 
 /* lab5fs superblock layout on disk */
@@ -66,7 +67,7 @@ struct lab5fs_dir_entry
 {
     unsigned long inode;    /* Inode number */
     unsigned short rec_len; /* Directory entry length */
-    int namelen;            /* Name length */
+    __u8 namelen;           /* Name length */
     char *file_type;
     char name[MAX_FILE_NAME_LENGTH]; /* File name */
 };
