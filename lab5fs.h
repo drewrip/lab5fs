@@ -6,6 +6,8 @@
 #define LAB5FS_MAGIC 0xCAFED00D
 #define LAB5FS_ROOT_INO 1
 #define INODE_TABLE_BLOCK_NO 3
+#define INODE_BITMAP_BLOCK_NO 2
+#define MAX_FILE_NAME_LENGTH 255
 #include <linux/types.h>
 
 /* lab5fs superblock layout on disk */
@@ -22,6 +24,16 @@ struct lab5fs_super_block
     unsigned short s_state;                                                                   /* File system state */
     unsigned short s_inode_size;                                                              /* size of inode structure */
     char s_reserved[LAB5FS_BSIZE - (7 * sizeof(unsigned long) + 2 * sizeof(unsigned short))]; /* Padding to 1024*/
+};
+/*
+ * lab5fs in-memory super_block info
+ */
+struct lab5fs_sb_info
+{
+    unsigned long *i_sblock_dentries; /* Starting block of dir entries */
+    lab5fs_bitmap *inode_bitmap;      /* Keep pointer to inode bitmap in memory */
+    buffer_head *inode_bitmap_bh;
+    unsigned long sbi_last_ino;
 };
 /* lab5fs inode layout on disk */
 struct lab5fs_inode
@@ -46,15 +58,17 @@ struct lab5fs_inode
 struct lab5fs_inode_info
 {
     unsigned long i_sblock_dentries; /* Starting block of dir entries */
+    unsigned long i_sblock_data;     /* Starting block of dir entries */
+    unsigned long i_eblock_data;     /* Starting block of dir entries */
 };
 /* lab5fs dentry layout on disk */
 struct lab5fs_dir_entry
 {
     unsigned long inode;    /* Inode number */
     unsigned short rec_len; /* Directory entry length */
-    char *name_len;         /* Name length */
+    int namelen;            /* Name length */
     char *file_type;
-    char name[255]; /* File name */
+    char name[MAX_FILE_NAME_LENGTH]; /* File name */
 };
 enum
 {
@@ -68,13 +82,10 @@ enum
 #define BFS_FILEBLOCKS(ip) \
     ((ip)->i_sblock == 0 ? 0 : ((ip)->i_eblock + 1) - (ip)->i_sblock)
 
-struct lab5fs_sb_info
-{
-};
 /* Define bitmap structure for lab5fs */
 typedef struct
 {
-    unsigned char bitmap[LAB5FS_BSIZE];
+    unsigned long bitmap[LAB5FS_BSIZE >> 2];
 } lab5fs_bitmap;
 /* Define block allocation bitmap structure for dir entries in lab5fs */
 typedef struct
