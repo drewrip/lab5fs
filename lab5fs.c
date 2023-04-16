@@ -175,8 +175,14 @@ static int lab5fs_link(struct dentry *old_dentry, struct inode *dir,
 }
 static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
 {
-	/** TODO: Complete function*/
+
 	printk("Inside lab5fs_lookup\n");
+	if (!dentry->d_name)
+	{
+		printk("lab5fs_lookup: dentry doesn't exist!\n");
+		return NULL;
+	}
+	/** TODO: Complete function*/
 	return dentry;
 }
 
