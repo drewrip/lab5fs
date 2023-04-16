@@ -7,11 +7,19 @@
 #define PADDING 3
 #define REC_LEN_ALIGN_FOUR(namelen) (((namelen) + SIZE_OF_DIR_MINUS_NAME + PADDING) & \
 									 ~PADDING)
+
+/* Declare static functions for file system operations */
+static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidata *nd);
+static int lab5fs_link(struct dentry *old_dentry, struct inode *dir,
+					   struct dentry *dentry);
+static int lab5fs_unlink(struct inode *dir, struct dentry *dentry);
+static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd);
+
 MODULE_LICENSE("GPL");
 static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 {
 	struct buffer_head *bh_dir;
-	struct lab5fs_inode_info in_info;
+	struct lab5fs_inode_info *in_info;
 	struct lab5fs_dir_entry *current_lab5fs_de;
 	int offset = 0, block_no, data_sblock_no, data_eblock_no;
 	struct inode *parent_inode = dentry->d_parent->d_inode;
@@ -33,23 +41,23 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 		printk("lab5fs_add_entry: entry name exceed max name length\n");
 	return -ENAMETOOLONG;
 	/* Iterate through data blocks until we find a free chunk */
-	for (block = data_sblock_no; block <= data_eblock_no; block++)
+	for (block_no = data_sblock_no; block_no <= data_eblock_no; block_no++)
 	{
 		/* Read the block from disk */
-		bh_dir = sb_bread(dir->i_sb, block);
+		bh_dir = sb_bread(inode->i_sb, block_no);
 		if (!bh_dir)
 		{
 			printk("lab5fs_add_entry: couldn't find space for dentry\n");
 			return -ENOSPC;
 		}
 		/* If we get here, that means that there might be space, so we look for a free chunk within the block */
-		for (offset; offset < LAB5FS_BSIZE; offset += current_de_rec_len)
+		for (; offset < LAB5FS_BSIZE; offset += current_de_rec_len)
 		{
 			/* Let's obtain thet lab5fs dentry from disk to check if it's empty */
 			current_lab5fs_de = (struct lab5fs_dir_entry *)(bh_dir->b_data + offset);
 			/* If inode number isn't set and the chunk's size can accomodate out entry, we presist the data */
 			current_de_rec_len = current_lab5fs_de->rec_len;
-			if (!current_lab5fs_de->ino && current_de_rec_len >= future_de_rec_len)
+			if (!current_lab5fs_de->inode && current_de_rec_len >= future_de_rec_len)
 				goto found_chunk;
 			/*  If the last statement didn't pass, don't panic, we can still find space.
 			 *  Let's see if at least the curent entry has some padding that can fit our entry.
@@ -66,20 +74,20 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 found_chunk:
 	current_lab5fs_de->rec_len = current_de_aligned_rec_len;
 	/* Handle case where we're adding the dentry into the chunk of another dentry */
-	if (current_de_rec_len->inode)
+	if (current_lab5fs_de->inode)
 	{
-		struct lab5fs_dir_entry *tmp_de = (lab5fs_dir_entry *)((char *)current_de_rec_len + current_lab5fs_de->namelen);
+		struct lab5fs_dir_entry *tmp_de = (struct lab5fs_dir_entry *)((char *)(current_de_rec_len + current_lab5fs_de->namelen));
 		tmp_de->rec_len = current_de_aligned_rec_len - current_lab5fs_de->namelen;
 
 		current_lab5fs_de = tmp_de;
 	}
 	current_lab5fs_de->inode = inode->i_ino;
-	current_lab5fs_de->name_len = namelen;
+	current_lab5fs_de->namelen = namelen;
 	memcpy(current_lab5fs_de->name, name, namelen);
 
 	/* Update parent inode */
 	parent_inode->i_size += current_lab5fs_de->rec_len;
-	parent_inode->i_mtime = dir->i_ctime = CURRENT_TIME;
+	parent_inode->i_mtime = parent_inode->i_ctime = CURRENT_TIME;
 	/* Mark inode and buffer dirty and return the caller */
 	mark_inode_dirty(parent_inode);
 	mark_buffer_dirty(bh_dir);
@@ -88,16 +96,16 @@ found_chunk:
 }
 static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidata *nd)
 {
-	printk("Inside lab5fs_create\n");
 	int res;
 	struct inode *inode;
 	struct super_block *sb = dir->i_sb;
 	struct lab5fs_sb_info *sb_info = sb->s_fs_info;
-	struct lab5fs_inode_info in_info;
+	struct lab5fs_inode_info *in_info;
 	struct buffer_head *bh_bitmap = sb_info->inode_bitmap_bh;
-	lab5fs_bitmap b_map = ((lab5fs_bitmap *)(bh_bitmap->b_data))->bitmap;
+	struct lab5fs_bitmap *b_map = ((struct lab5fs_bitmap *)(bh_bitmap->b_data));
 	unsigned long ino;
 
+	printk("Inside lab5fs_create\n");
 	inode = new_inode(sb);
 	if (!inode)
 		return -ENOSPC;
@@ -114,16 +122,16 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 		printk("lab5fs_create: couldn't read inode bitmap\n");
 		return -1;
 	}
-	ino = find_first_zero_bit(b_map, LAB5FS_BSIZE);
+	ino = find_first_zero_bit(b_map->bitmap, LAB5FS_BSIZE);
 	if (ino > LAB5FS_BSIZE)
 	{
 		iput(inode);
 		return -ENOSPC;
 	}
-	// after finding the block number, we persist it to data, set the bit, and add the entry
+	// TODO: after finding the block number, we persist it to data, set the bit, and add the entry
 	// look into insert_into hash and mark dirty
 	// look into locking super block
-	set_bit(ino, b_map);
+	set_bit(ino, b_map->bitmap);
 	mark_buffer_dirty(bh_bitmap);
 	inode->i_mode = mode;
 	inode->i_ino = ino;
@@ -148,7 +156,7 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 		mark_inode_dirty(inode);
 		iput(inode);
 		printk("lab5fs_create: couldn't add dir entry and received error number %d\n", res);
-		return err;
+		return res;
 	}
 	d_instantiate(dentry, inode);
 	// set buffer to dirty
@@ -160,36 +168,32 @@ static int lab5fs_unlink(struct inode *dir, struct dentry *dentry)
 	printk("Inside lab5fs_unlink\n");
 	return 0;
 }
+static int lab5fs_link(struct dentry *old_dentry, struct inode *dir,
+					   struct dentry *dentry)
+{
+	/** TODO: Complete function*/
+	printk("Inside lab5fs_link\n");
+	return 0;
+}
 static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
 {
 	/** TODO: Complete function*/
 	printk("Inside lab5fs_lookup\n");
 	return dentry;
 }
-/** TODO: Revisit operation structs to add/remove functionalites as needed */
-static struct inode_operations lab5fs_file_inops = {
-	.create = lab5fs_create,
-	.link = lab5fs_link,
-	.unlink = lab5fs_unlink,
-	.lookup = lab5fs_lookup,
-};
-static struct file_operations lab5fs_file_operations = {
-	.llseek = generic_file_llseek,
-	.read = generic_file_read,
-	.write = generic_file_write,
-	.mmap = generic_file_mmap,
-	.open = generic_file_open,
-};
+
 static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 {
-	struct inode *d_ino = flip->f_dentry->inode;
+	struct inode *d_ino = flip->f_dentry->d_inode;
 	struct buffer_head *bh;
 	struct lab5fs_dir_entry *lab5fs_dentry;
+	struct lab5fs_inode_info *in_info;
 	unsigned int b_offset;
 	loff_t f_pos = flip->f_pos;
-	int block_no;
+	unsigned long block_no;
+	in_info = (struct lab5fs_inode_info *)(d_ino->u.generic_ip);
 	/* Ensure that we don't read past the boundary of a dir entry */
-	if (f_pos & (sizeof(lab5fs_dir_entry) - 1))
+	if (f_pos & (sizeof(struct lab5fs_dir_entry) - 1))
 	{
 		printk("lab5fs_readdir: attempted to read beyond file\n");
 		return -1;
@@ -200,7 +204,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 		/* Calculate offset within a lab5fs block */
 		b_offset = f_pos & (LAB5FS_BSIZE - 1);
 		/* Obtain starting block number for dentries */
-		block_no = d_ino->u.generic_ip->i_sblock_dentries;
+		block_no = in_info->i_sblock_dentries;
 		/* Let's read the block and begin dir reading */
 		bh = sb_bread(d_ino->i_sb, block_no);
 		/* Update file offset in the event that the block read failed */
@@ -217,17 +221,17 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 		{
 			lab5fs_dentry = (struct lab5fs_dir_entry *)(bh->b_data + b_offset);
 			/* Ensure that we don't read the root inode */
-			if (lab5fs_dentry->ino)
+			if (lab5fs_dentry->inode)
 			{
-				if (filldir(dirent, lab5fs_dentry->name, lab5fs_dentry->name_len, flip->f_pos, lab5fs_dentry->ino, DT_UNKNOWN) < 0)
+				if (filldir(dirent, lab5fs_dentry->name, lab5fs_dentry->namelen, flip->f_pos, lab5fs_dentry->inode, DT_UNKNOWN) < 0)
 				{
 					brelse(bh);
 					return 0;
 				}
 			}
-			offset += le16_to_cpu(lab5fs_dentry->rec_len);
+			b_offset += le16_to_cpu(lab5fs_dentry->rec_len);
 			flip->f_pos += le16_to_cpu(lab5fs_dentry->rec_len);
-		} while (offset < LAB5FS_BSIZE && flip->f_pos < d_ino->i_size);
+		} while (b_offset < LAB5FS_BSIZE && flip->f_pos < d_ino->i_size);
 		brelse(bh);
 	}
 	return 0;
@@ -430,3 +434,18 @@ static void __exit exit_lab5fs_fs(void)
 
 module_init(init_lab5fs_fs);
 module_exit(exit_lab5fs_fs);
+
+/** TODO: Revisit operation structs to add/remove functionalites as needed */
+static struct inode_operations lab5fs_file_inops = {
+	.create = lab5fs_create,
+	.link = lab5fs_link,
+	.unlink = lab5fs_unlink,
+	.lookup = lab5fs_lookup,
+};
+static struct file_operations lab5fs_file_operations = {
+	.llseek = generic_file_llseek,
+	.read = generic_file_read,
+	.write = generic_file_write,
+	.mmap = generic_file_mmap,
+	.open = generic_file_open,
+};

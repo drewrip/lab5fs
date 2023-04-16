@@ -32,8 +32,7 @@ struct lab5fs_super_block
 struct lab5fs_sb_info
 {
     unsigned long *i_sblock_dentries; /* Starting block of dir entries */
-    lab5fs_bitmap *inode_bitmap;      /* Keep pointer to inode bitmap in memory */
-    buffer_head *inode_bitmap_bh;
+    struct buffer_head *inode_bitmap_bh;
     unsigned long sbi_last_ino;
 };
 /* lab5fs inode layout on disk */
@@ -84,7 +83,7 @@ enum
     ((ip)->i_sblock == 0 ? 0 : ((ip)->i_eblock + 1) - (ip)->i_sblock)
 
 /* Define bitmap structure for lab5fs */
-typedef struct
+typedef struct lab5fs_bitmap
 {
     unsigned long bitmap[LAB5FS_BSIZE >> 2];
 } lab5fs_bitmap;
@@ -93,8 +92,10 @@ typedef struct
 {
     unsigned long block_map[LAB5FS_BSIZE >> 2]; /* Maps 256 inodes in one block */
 } lab5fs_block_map;
-/* super.c */
-
-/* inode.c */
+/* lab5fs.c */
+extern struct inode_operations lab5fs_file_inops;
+extern struct file_operations lab5fs_file_operations;
+extern struct address_space_operations lab5fs_aops;
+extern struct file_operations lab5fs_dir_operations;
 
 #endif
