@@ -4,9 +4,6 @@
 #include <linux/buffer_head.h>
 #include <linux/vfs.h>
 #include "lab5fs.h"
-#define PADDING 3
-#define REC_LEN_ALIGN_FOUR(namelen) (((namelen) + SIZE_OF_DIR_MINUS_NAME + PADDING) & \
-									 ~PADDING)
 
 /* Declare static functions for file system operations */
 static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidata *nd);
@@ -248,6 +245,7 @@ void lab5fs_read_inode(struct inode *inode)
 	unsigned long ino = inode->i_ino;
 	struct lab5fs_inode *di;
 	struct buffer_head *bh;
+	struct lab5fs_inode_info *in_info;
 	int block, off;
 	printk("lab5fs_read_inode (debug): reading inode\n");
 	if (!inode)
@@ -284,7 +282,17 @@ void lab5fs_read_inode(struct inode *inode)
 	// 	inode->i_fop = &lab5fs_file_operations;
 	// 	inode->i_mapping->a_ops = &lab5fs_aops;
 	// }
+	in_info = kmalloc(sizeof(struct lab5fs_inode_info), GFP_KERNEL);
+	if (!in_info)
+	{
+		printk("lab5fs_read_inode: couldn't allocate struct lab5fs_inode_info\n");
+		goto done;
+	}
+	in_info->i_sblock_dentries = INODE_TABLE_BLOCK_NO + 1;
+	in_info->i_sblock_data = INODE_TABLE_BLOCK_NO + 1;
+	in_info->i_eblock_data = in_info->i_sblock_data + 1;
 
+	inode->u.generic_ip = in_info;
 	inode->i_uid = di->i_uid;
 	inode->i_gid = di->i_gid;
 	inode->i_size = di->i_size;
@@ -301,7 +309,7 @@ void lab5fs_read_inode(struct inode *inode)
 
 	// if (!inode->i_ino)
 	// inode->i_mode |= S_IFDIR;
-
+done:
 	brelse(bh);
 	printk("lab5fs_read_inode (debug): done reading inode\n");
 }

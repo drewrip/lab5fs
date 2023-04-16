@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <string.h>
+
 #include "lab5fs.h"
 
 int validate_image(const char *pathname, unsigned long *block_count)
@@ -69,6 +70,7 @@ int main(int argc, char *argv[])
     sb.s_free_inodes_count = max_num_of_inodes - 1;
     sb.s_free_blocks_count = block_count - 1;
     lab5fs_bitmap data_block_bitmap, inode_bitmap;
+    struct lab5fs_dir_entry dentry;
 
     // Write super block to device or file
     if ((res = write(fd, &sb, sizeof(sb))) < 0)
@@ -85,6 +87,9 @@ int main(int argc, char *argv[])
      *  TODO: account for number of data blocks greater than LAB5FS_BLOCK_SIZE * 8
      *  and factor-in the number of blocks needed for the inode-table
      */
+    /* Set first bit for root inode '.' & '..' entries */
+    data_block_bitmap.bitmap[0] |= 0x3;
+
     memset(&data_block_bitmap, 0, sizeof(data_block_bitmap));
     if ((res = write(fd, &data_block_bitmap, sizeof(data_block_bitmap))) < 0)
     {
@@ -124,15 +129,57 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Couldn't return to the right offset in file descriptor\n");
         exit(EXIT_FAILURE);
     }
-    /* Update offset for next write*/
-    offset += res;
     // Write root inode to device or file
     if ((res = write(fd, &root_inode, sizeof(root_inode))) < 0)
     {
-        fprintf(stderr, "Couldn't write root indoe to device and received error number %d\n", res);
+        fprintf(stderr, "Couldn't write root inode to device and received error number %d\n", res);
         exit(EXIT_FAILURE);
     }
-    printf("Finished writing %lu bytes to device's root inode\n", res);
+    /* Update offset for next write*/
+    offset += res;
+    printf("Finished writing %lu bytes to device's root dentry '.'\n", res);
+    /* Update offset to write in data blocks, so skip inode tables */
+    offset += (LAB5FS_BSIZE - res);
+    if ((cmp = lseek(fd, offset, SEEK_SET)) < 0 || cmp != offset)
+    {
+        fprintf(stderr, "Couldn't return to the right offset in file descriptor\n");
+        exit(EXIT_FAILURE);
+    }
+    memset(&dentry, 0, sizeof(dentry));
+    dentry.inode = 1;
+    dentry.namelen = strlen(".");
+    dentry.rec_len = REC_LEN_ALIGN_FOUR(dentry.namelen);
+    memcpy(dentry.name, ".", dentry.namelen);
+
+    // Write root dentry to device or file
+    if ((res = write(fd, &dentry, dentry.rec_len)) < 0)
+    {
+        fprintf(stderr, "Couldn't write root dentry '.' to device and received error number %d\n", res);
+        exit(EXIT_FAILURE);
+    }
+    /* Update offset for next write*/
+    offset += res;
+    printf("Finished writing %lu bytes to device's root dentry '.'\n", res);
+    if ((cmp = lseek(fd, offset, SEEK_SET)) < 0 || cmp != offset)
+    {
+        fprintf(stderr, "Couldn't return to the right offset in file descriptor\n");
+        exit(EXIT_FAILURE);
+    }
+    memset(&dentry, 0, sizeof(dentry));
+    dentry.inode = 1;
+    dentry.namelen = strlen("..");
+    dentry.rec_len = REC_LEN_ALIGN_FOUR(dentry.namelen);
+    memcpy(dentry.name, "..", dentry.namelen);
+
+    // Write root dentry to device or file
+    if ((res = write(fd, &dentry, dentry.rec_len)) < 0)
+    {
+        fprintf(stderr, "Couldn't write root indoe dentry '..' to device and received error number %d\n", res);
+        exit(EXIT_FAILURE);
+    }
+    printf("Finished writing %lu bytes to device's root dentry '..'\n", res);
+    /* Update offset for next write*/
+    offset += res;
     if ((res = close(fd)) < 0)
     {
         fprintf(stderr, "Couldn't close device and received error number %d\n", res);

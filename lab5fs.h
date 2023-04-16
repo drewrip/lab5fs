@@ -9,6 +9,9 @@
 #define INODE_BITMAP_BLOCK_NO 2
 #define MAX_FILE_NAME_LENGTH 255
 #define SIZE_OF_DIR_MINUS_NAME 8
+#define PADDING 3
+#define REC_LEN_ALIGN_FOUR(namelen) (((namelen) + SIZE_OF_DIR_MINUS_NAME + PADDING) & \
+                                     ~PADDING)
 #include <linux/types.h>
 
 /* lab5fs superblock layout on disk */
