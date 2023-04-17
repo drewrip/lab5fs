@@ -9,6 +9,7 @@
 #define INODE_BITMAP_BLOCK_NO 2
 #define MAX_FILE_NAME_LENGTH 255
 #define SIZE_OF_DIR_MINUS_NAME 8
+#define LAB5FS_ROOT_INODE 1 // inode number 0 is reserved for NULL checks
 #define PADDING 3
 #define REC_LEN_ALIGN_FOUR(namelen) (((namelen) + SIZE_OF_DIR_MINUS_NAME + PADDING) & \
                                      ~PADDING)
@@ -34,9 +35,7 @@ struct lab5fs_super_block
  */
 struct lab5fs_sb_info
 {
-    unsigned long *i_sblock_dentries; /* Starting block of dir entries */
     struct buffer_head *inode_bitmap_bh;
-    unsigned long sbi_last_ino;
 };
 /* lab5fs inode layout on disk */
 struct lab5fs_inode

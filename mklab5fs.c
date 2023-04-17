@@ -101,8 +101,8 @@ int main(int argc, char *argv[])
     printf("Finished writing %lu bytes to device's data block bitmap\n", res);
     /* Initialize and write inode bitmap to device */
     memset(&inode_bitmap, 0, sizeof(inode_bitmap));
-    /* Set the first bit of the inode_bitmap for the root inode */
-    inode_bitmap.bitmap[0] |= 0x1;
+    /* Set the first two bits of the inode_bitmap for the root inode and NULL node */
+    inode_bitmap.bitmap[0] |= 0x3;
     if ((res = write(fd, &inode_bitmap, sizeof(inode_bitmap))) < 0)
     {
         fprintf(stderr, "Couldn't write inode bitmap to device and received error number %d\n", res);

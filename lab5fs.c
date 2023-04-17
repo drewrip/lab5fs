@@ -16,6 +16,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir);
 MODULE_LICENSE("GPL");
 static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 {
+	printk("lab5fs_add_entry (debug): inside lab5fs_add_entry\n");
 	struct buffer_head *bh_dir;
 	struct lab5fs_inode_info *in_info;
 	struct lab5fs_dir_entry *current_lab5fs_de;
@@ -67,6 +68,7 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 		brelse(bh_dir);
 	}
 	/* Uh no, there's no space */
+	printk("leaving lab5fs_add_entry after finding no space\n");
 	return -ENOSPC;
 
 found_chunk:
@@ -90,20 +92,35 @@ found_chunk:
 	mark_inode_dirty(parent_inode);
 	mark_buffer_dirty(bh_dir);
 	brelse(bh_dir);
+	printk("leaving lab5fs_add_entry after finding space\n");
 	return 0;
 }
 static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidata *nd)
 {
+	printk("lab5fs_create (debug): inside lab5fs_create\n");
 	int res;
 	struct inode *inode;
-	struct super_block *sb = dir->i_sb;
-	struct lab5fs_sb_info *sb_info = sb->s_fs_info;
+	struct super_block *sb;
+	struct lab5fs_sb_info *sb_info;
 	struct lab5fs_inode_info *in_info;
-	struct buffer_head *bh_bitmap = sb_info->inode_bitmap_bh;
-	struct lab5fs_bitmap *b_map = ((struct lab5fs_bitmap *)(bh_bitmap->b_data));
+	struct buffer_head *bh_bitmap;
+	struct lab5fs_bitmap *b_map;
 	unsigned long ino;
-
-	printk("Inside lab5fs_create\n");
+	printk("lab5fs_create (debug): passed definition stage\n");
+	if (!dir)
+	{
+		printk("lab5fs_create: attempted to create an entry for a NULL inode\n");
+		return -EFAULT;
+	}
+	printk("lab5fs_create (debug): dir is not NULL but is %p\n", dir);
+	sb = dir->i_sb;
+	printk("lab5fs_create (debug): passed 1 assignment stage\n");
+	sb_info = sb->s_fs_info;
+	printk("lab5fs_create (debug): passed 2 assignment stages\n");
+	bh_bitmap = sb_info->inode_bitmap_bh;
+	printk("lab5fs_create (debug): passed 3 assignment stages\n");
+	b_map = ((struct lab5fs_bitmap *)(bh_bitmap->b_data));
+	printk("lab5fs_create (debug): passed all assignment stages\n");
 	inode = new_inode(sb);
 	if (!inode)
 		return -ENOSPC;
@@ -120,7 +137,9 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 		printk("lab5fs_create: couldn't read inode bitmap\n");
 		return -1;
 	}
+	printk("lab5fs_create (debug): passed bitmap block stage\n");
 	ino = find_first_zero_bit(b_map->bitmap, LAB5FS_BSIZE);
+	printk("lab5fs_create (debug): passed bitmap block bit set\n");
 	if (ino > LAB5FS_BSIZE)
 	{
 		iput(inode);
@@ -144,6 +163,7 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	inode->i_mapping->a_ops = &lab5fs_aops;
 	inode->i_nlink = 1;
 	inode->u.generic_ip = in_info;
+	printk("lab5fs_create (debug): passed inode assignment stage 1\n");
 	insert_inode_hash(inode);
 	mark_inode_dirty(inode);
 	/* Add dentry to data block to establish the inode link */
@@ -157,7 +177,9 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 		return res;
 	}
 	d_instantiate(dentry, inode);
+	printk("lab5fs_create (debug): passed inode assignment stage 2\n");
 	// set buffer to dirty
+	printk("lab5fs_create (debug): leaving lab5fs_create\n");
 	return 0;
 }
 static int lab5fs_unlink(struct inode *dir, struct dentry *dentry)
@@ -175,8 +197,49 @@ static int lab5fs_link(struct dentry *old_dentry, struct inode *dir,
 }
 static struct buffer_head *lab5fs_find_entry(struct inode *dir, const char *name, int namelen, struct lab5fs_dir_entry **res_dir)
 {
-	struct buffer_head *bh = NULL;
-	return bh;
+	unsigned long block, offset;
+	struct buffer_head *bh_dir = NULL;
+	struct lab5fs_dir_entry *de;
+	struct lab5fs_inode_info *in_info = (struct lab5fs_inode_info *)(dir->u.generic_ip);
+	printk("lab5fs_find_entry: inside lab5fs_find_entry\n");
+	*res_dir = NULL;
+	if (namelen > MAX_FILE_NAME_LENGTH)
+		return NULL;
+	bh_dir = NULL;
+	block = offset = 0;
+	while (block * LAB5FS_BSIZE + offset < dir->i_size)
+	{
+		if (!bh_dir)
+		{
+			bh_dir = sb_bread(dir->i_sb, in_info->i_sblock_data + block);
+			if (!bh_dir)
+			{
+				block++;
+				continue;
+			}
+		}
+		de = (struct lab5fs_dir_entry *)(bh_dir->b_data + offset);
+		if (de && de->rec_len)
+			offset += de->rec_len;
+		else
+			offset += sizeof(struct lab5fs_dir_entry);
+		if (de->inode && !memcmp(name, de->name, namelen))
+		{
+			printk("lab5fs_find_entry: found dentry for inode %lu and name %s\n", de->inode, name);
+			*res_dir = de;
+			return bh_dir;
+		}
+		if (offset < bh_dir->b_size)
+			continue;
+		brelse(bh_dir);
+		bh_dir = NULL;
+		offset = 0;
+		block++;
+	}
+	brelse(bh_dir);
+	/* If we get here, it means we couldn't find the entry */
+	printk("lab5fs_find_entry: leaving lab5fs_find_entry\n");
+	return NULL;
 }
 static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
 {
@@ -185,7 +248,7 @@ static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, st
 	struct inode *inode_of_dir = NULL;
 
 	printk("Inside lab5fs_lookup\n");
-	if (!dentry || !dentry->d_name.len)
+	if (!dir || !dentry || !dentry->d_name.len)
 	{
 		printk("lab5fs_lookup: dentry doesn't exist!\n");
 		return ERR_PTR(-EINVAL);
@@ -211,13 +274,16 @@ static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, st
 		}
 	}
 	/* If we get here, the dentry is valid and confirm, so we add to the dcache */
+	printk("lab5fs_lookup: calling d_add on inode %p, name %s, and length %d\n", inode_of_dir, dentry->d_name.name, dentry->d_name.len);
 	d_add(dentry, inode_of_dir);
 	/* Return NULL to idicate that all went well! */
+	printk("Leaving lab5fs_lookup\n");
 	return NULL;
 }
 
 static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 {
+	printk("lab5fs_readdir (debug): inside lab5fs_readdir\n");
 	struct inode *d_ino = flip->f_dentry->d_inode;
 	struct buffer_head *bh;
 	struct lab5fs_dir_entry *lab5fs_dentry;
@@ -301,12 +367,13 @@ static struct address_space_operations lab5fs_aops = {
 /** TODO: Clean up function and add/remove logic as needed */
 void lab5fs_read_inode(struct inode *inode)
 {
+	printk("lab5fs_read_inode (debug): reading inode\n");
 	unsigned long ino = inode->i_ino;
 	struct lab5fs_inode *di;
 	struct buffer_head *bh;
 	struct lab5fs_inode_info *in_info;
 	int block, off;
-	printk("lab5fs_read_inode (debug): reading inode\n");
+
 	if (!inode)
 	{
 		printk("lab5fs_read_inode: attempted to read NULL inode\n");
@@ -399,17 +466,22 @@ struct super_operations lab5fs_sops = {
 
 static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 {
-	struct buffer_head *bh;
-	struct lab5fs_sb_info *sbi;
+	struct buffer_head *bh, *bh_bitmap = NULL;
 	struct lab5fs_super_block *lb5_sb;
 	struct inode *root_inode;
-	printk("lab5fs (debug): inside lab5fs_fill_super.\n");
+	struct lab5fs_sb_info *sb_info;
+
 	/* Initialize lab5fs private info */
-	sbi = kmalloc(sizeof(*sbi), GFP_KERNEL);
-	if (!sbi)
+	sb_info = kmalloc(sizeof(struct lab5fs_sb_info), GFP_KERNEL);
+	printk("lab5fs (debug): inside lab5fs_fill_super.\n");
+	if (!sb_info)
+	{
+		printk("lab5fs (debug): couldn't allocate memory for sb_info struct.\n");
 		return -ENOMEM;
-	sb->s_fs_info = sbi;
-	memset(sbi, 0, sizeof(*sbi));
+	}
+
+	sb->s_fs_info = sb_info;
+	memset(sb_info, 0, sizeof(*sb_info));
 	/* Set blocksize and blocksize_bits */
 	if (!sb_set_blocksize(sb, LAB5FS_BSIZE))
 	{
@@ -430,12 +502,20 @@ static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 				   sb->s_id);
 		goto failed_mount;
 	}
+	if (!(bh_bitmap = sb_bread(sb, INODE_BITMAP_BLOCK_NO)))
+	{
+		printk(KERN_ERR "lab5fs: couldn't read inode bitmap from disk.\n");
+		goto failed_sbi;
+	}
+
+	sb_info->inode_bitmap_bh = bh_bitmap;
+
 	sb->s_magic = LAB5FS_MAGIC;
 	sb->s_op = &lab5fs_sops;
 	sb->s_blocksize = LAB5FS_BSIZE;
 	sb->s_blocksize_bits = LAB5FS_BSIZE_BITS;
 	sb->s_maxbytes = (((unsigned long long)1) << 32) - 1;
-	root_inode = iget(sb, 0);
+	root_inode = iget(sb, LAB5FS_ROOT_INODE);
 	if (!root_inode)
 	{
 		printk("lab5fs (debug): failed iget.\n");
@@ -455,12 +535,13 @@ static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 /* Handlers for fails */
 failed_mount:
 	brelse(bh);
+	brelse(bh_bitmap);
 	printk("lab5fs (debug): inside failed_mount.\n");
 
 failed_sbi:
 	printk("lab5fs (debug): inside failed_sbi.\n");
 	sb->s_fs_info = NULL;
-	kfree(sbi);
+	kfree(sb_info);
 	return -EINVAL;
 }
 
