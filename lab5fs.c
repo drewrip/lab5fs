@@ -173,17 +173,47 @@ static int lab5fs_link(struct dentry *old_dentry, struct inode *dir,
 	printk("Inside lab5fs_link\n");
 	return 0;
 }
+static struct buffer_head *lab5fs_find_entry(struct inode *dir, const char *name, int namelen, struct lab5fs_dir_entry **res_dir)
+{
+	struct buffer_head *bh = NULL;
+	return bh;
+}
 static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
 {
+	struct buffer_head *bh_dir;
+	struct lab5fs_dir_entry *lab5_de;
+	struct inode *inode_of_dir = NULL;
 
 	printk("Inside lab5fs_lookup\n");
-	if (!dentry->d_name)
+	if (!dentry || !dentry->d_name.len)
 	{
 		printk("lab5fs_lookup: dentry doesn't exist!\n");
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
-	/** TODO: Complete function*/
-	return dentry;
+	if (dentry->d_name.len > MAX_FILE_NAME_LENGTH)
+	{
+		printk("lab5fs_lookup: dentry's name exceeds max limit!\n");
+		return ERR_PTR(-ENAMETOOLONG);
+	}
+	/* Find entry and read it into the buffer_head */
+	bh_dir = lab5fs_find_entry(dir, dentry->d_name.name, dentry->d_name.len, &lab5_de);
+	/* Confirm that the read was successful and proceed to inode extraction */
+	if (bh_dir)
+	{
+		/* We don't need buffer head anymore, so release resources */
+		brelse(bh_dir);
+		/* Let's get the corresponding inode and confirm that the dentry is valid */
+		inode_of_dir = iget(dir->i_sb, lab5_de->inode);
+		if (!inode_of_dir)
+		{
+			printk("lab5fs_lookup: couldn't access inode for corresponding dentry\n");
+			return ERR_PTR(-EACCES);
+		}
+	}
+	/* If we get here, the dentry is valid and confirm, so we add to the dcache */
+	d_add(dentry, inode_of_dir);
+	/* Return NULL to idicate that all went well! */
+	return NULL;
 }
 
 static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
@@ -249,7 +279,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 				}
 				b_offset += lab5fs_dentry->rec_len;
 				flip->f_pos += lab5fs_dentry->rec_len;
-				printk("lab5fs_readdir: done calling filldir and for inode %lu, name %s, namelen is %lu, and rec_len %lu\n", lab5fs_dentry->inode, lab5fs_dentry->name, lab5fs_dentry->namelen, lab5fs_dentry->rec_len);
+				printk("lab5fs_readdir: done calling filldir and for inode %lu, name %s, namelen is %c, and rec_len %hu\n", lab5fs_dentry->inode, lab5fs_dentry->name, lab5fs_dentry->namelen, lab5fs_dentry->rec_len);
 			}
 			else
 			{
