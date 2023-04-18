@@ -12,6 +12,7 @@ static int lab5fs_link(struct dentry *old_dentry, struct inode *dir,
 static int lab5fs_unlink(struct inode *dir, struct dentry *dentry);
 static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd);
 static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir);
+static struct buffer_head *lab5fs_find_entry(struct inode *dir, const char *name, int namelen, struct lab5fs_dir_entry **res_dir);
 
 MODULE_LICENSE("GPL");
 static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
@@ -212,16 +213,56 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 static int lab5fs_unlink(struct inode *dir, struct dentry *dentry)
 {
 	/** TODO: Complete function*/
+	int error = -ENOENT;
+	struct inode* inode;
+	struct buffer_head* bh;
+	struct lab5fs_dir_entry* de;
+
 	printk("Inside lab5fs_unlink\n");
-	return 0;
+	inode = dentry->d_inode;
+	/* Also skipping a lock_kernel() here */
+
+	bh = lab5fs_find_entry(dir, dentry->d_name.name, dentry->d_name.len, &de);
+	if(!bh || de->inode != inode->i_ino)
+		goto out_brelse;	
+
+	if(!inode->i_nlink){
+		printk("unlinking non-existent file %s\n", inode->i_sb->s_id);
+		inode->i_nlink = 1;	
+	}
+	de->inode = 0;
+	mark_buffer_dirty(bh);
+	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+	mark_inode_dirty(dir);
+	inode->i_nlink--;
+	inode->i_ctime = dir->i_ctime;
+	mark_inode_dirty(inode);
+	error = 0;
+out_brelse:
+	brelse(bh);
+	return error;
 }
+
 static int lab5fs_link(struct dentry *old_dentry, struct inode *dir,
 					   struct dentry *dentry)
 {
-	/** TODO: Complete function*/
-	printk("Inside lab5fs_link\n");
+	struct inode* inode = old_dentry->d_inode;
+	int err;
+	
+	/* BFS does some locking here via lock_kernel(), gonna omit for now*/
+	err = lab5fs_add_entry(dentry, dir);
+	if(err){
+		printk("ERROR linking\n");
+		return err;
+	}
+	inode->i_nlink++;
+	inode->i_ctime = CURRENT_TIME;
+	mark_inode_dirty(inode);
+	atomic_inc(&inode->i_count);
+	d_instantiate(dentry, inode);
 	return 0;
 }
+
 static struct buffer_head *lab5fs_find_entry(struct inode *dir, const char *name, int namelen, struct lab5fs_dir_entry **res_dir)
 {
 	unsigned long block, offset;
