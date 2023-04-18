@@ -3,6 +3,7 @@
 #include <linux/init.h>
 #include <linux/buffer_head.h>
 #include <linux/vfs.h>
+#include <linux/smp_lock.h>
 #include "lab5fs.h"
 
 /* Declare static functions for file system operations */
@@ -137,9 +138,11 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	inode = new_inode(sb);
 	if (!inode)
 		return -ENOSPC;
+	lock_kernel();
 	in_info = kmalloc(sizeof(struct lab5fs_inode_info), GFP_KERNEL);
 	if (!in_info)
 	{
+		unlock_kernel();
 		iput(inode);
 		printk("lab5fs_create: couldn't find space to allocate lab5fs_sb_info\n");
 		return -ENOSPC;
@@ -147,6 +150,7 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	/* Update file offset in the event that the block read failed */
 	if (!bh_bitmap)
 	{
+		unlock_kernel();
 		printk("lab5fs_create: couldn't read inode bitmap\n");
 		return -1;
 	}
@@ -155,6 +159,7 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	printk("lab5fs_create (debug): passed bitmap block bit set\n");
 	if (ino > LAB5FS_BSIZE)
 	{
+		unlock_kernel();
 		iput(inode);
 		return -ENOSPC;
 	}
@@ -202,8 +207,10 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 		mark_inode_dirty(inode);
 		iput(inode);
 		printk("lab5fs_create: couldn't add dir entry and received error number %d\n", res);
+		unlock_kernel();
 		return res;
 	}
+	unlock_kernel();
 	d_instantiate(dentry, inode);
 	printk("lab5fs_create (debug): passed inode assignment stage 2\n");
 	// set buffer to dirty
@@ -240,6 +247,7 @@ static int lab5fs_unlink(struct inode *dir, struct dentry *dentry)
 	error = 0;
 out_brelse:
 	brelse(bh);
+	unlock_kernel();
 	return error;
 }
 
@@ -248,7 +256,8 @@ static int lab5fs_link(struct dentry *old_dentry, struct inode *dir,
 {
 	struct inode* inode = old_dentry->d_inode;
 	int err;
-	
+
+	lock_kernel();	
 	/* BFS does some locking here via lock_kernel(), gonna omit for now*/
 	err = lab5fs_add_entry(dentry, dir);
 	if(err){
@@ -260,6 +269,7 @@ static int lab5fs_link(struct dentry *old_dentry, struct inode *dir,
 	mark_inode_dirty(inode);
 	atomic_inc(&inode->i_count);
 	d_instantiate(dentry, inode);
+	unlock_kernel();
 	return 0;
 }
 
@@ -326,6 +336,7 @@ static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, st
 		printk("lab5fs_lookup: dentry's name exceeds max limit!\n");
 		return ERR_PTR(-ENAMETOOLONG);
 	}
+	lock_kernel();
 	/* Find entry and read it into the buffer_head */
 	bh_dir = lab5fs_find_entry(dir, dentry->d_name.name, dentry->d_name.len, &lab5_de);
 	/* Confirm that the read was successful and proceed to inode extraction */
@@ -338,11 +349,13 @@ static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, st
 		if (!inode_of_dir)
 		{
 			printk("lab5fs_lookup: couldn't access inode for corresponding dentry\n");
+			unlock_kernel();
 			return ERR_PTR(-EACCES);
 		}
 	}
 	/* If we get here, the dentry is valid and confirm, so we add to the dcache */
 	printk("lab5fs_lookup: calling d_add on inode %p, name %s, and length %d\n", inode_of_dir, dentry->d_name.name, dentry->d_name.len);
+	unlock_kernel();
 	d_add(dentry, inode_of_dir);
 	/* Return NULL to idicate that all went well! */
 	printk("Leaving lab5fs_lookup\n");
@@ -361,10 +374,14 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 	unsigned long block_no;
 	in_info = (struct lab5fs_inode_info *)(d_ino->u.generic_ip);
 	printk("Inside lab5fs_readdir where f_pos is %lld and d_ino->i_size is %llu\n", f_pos, d_ino->i_size);
+	
+	lock_kernel();
+
 	/* Ensure that we don't read past the boundary of a dir entry */
 	if (flip->f_pos & (sizeof(struct lab5fs_dir_entry) - 1))
 	{
 		printk("lab5fs_readdir: attempted to read beyond file\n");
+		unlock_kernel();
 		return -1;
 	}
 	// if (f_pos == 0)
@@ -409,6 +426,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 				if (filldir(dirent, lab5fs_dentry->name, lab5fs_dentry->namelen, flip->f_pos, lab5fs_dentry->inode, DT_UNKNOWN) < 0)
 				{
 					brelse(bh);
+					unlock_kernel();
 					return 0;
 				}
 				b_offset += lab5fs_dentry->rec_len;
@@ -426,6 +444,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 		brelse(bh);
 	}
 	printk("Existing lab5fs_readdir\n");
+	unlock_kernel();
 	return 0;
 }
 
