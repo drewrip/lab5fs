@@ -61,13 +61,13 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 		for (; offset < LAB5FS_BSIZE; offset += current_de_rec_len)
 		{
 			/* Let's obtain thet lab5fs dentry from disk to check if it's empty */
-			printk("lab5fs_add_entry (debug): before current_lab5fs_de stage\n");
 			current_lab5fs_de = (struct lab5fs_dir_entry *)(bh_dir->b_data + offset);
 			/* If inode number isn't set and the chunk's size can accomodate out entry, we presist the data */
-			current_de_rec_len = sizeof(struct lab5fs_dir_entry);
-			printk("lab5fs_add_entry (debug): after current_lab5fs_de stage\n");
+
 			if (!current_lab5fs_de->inode)
 				goto found_chunk;
+			current_de_rec_len += current_lab5fs_de->rec_len;
+			printk("lab5fs_add_entry (debug): skipped over inode %lu with name %s and offset %lu\n", current_lab5fs_de->inode, current_lab5fs_de->name, current_de_rec_len);
 			/*  If the last statement didn't pass, don't panic, we can still find space.
 			 *  Let's see if at least the curent entry has some padding that can fit our entry.
 			 */
@@ -82,6 +82,7 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 	return -ENOSPC;
 
 found_chunk:
+	printk("lab5fs_add_entry: inside found_chunk with rec_len %hu, namelen %hu, name %s, inode %lu, and offset %lu\n", current_lab5fs_de->rec_len, current_lab5fs_de->namelen, current_lab5fs_de->name, current_lab5fs_de->inode, current_de_rec_len);
 	current_lab5fs_de->rec_len = REC_LEN_ALIGN_FOUR(namelen);
 	/* Handle case where we're adding the dentry into the chunk of another dentry */
 	if (current_lab5fs_de->inode)
@@ -95,10 +96,11 @@ found_chunk:
 	printk("lab5fs_add_entry (debug): after found_chunk stage\n");
 	current_lab5fs_de->inode = inode->i_ino;
 	current_lab5fs_de->namelen = namelen;
+	current_lab5fs_de->file_type = 2;
 	memcpy(current_lab5fs_de->name, name, namelen);
 
 	/* Update parent inode */
-	parent_inode->i_size += current_lab5fs_de->rec_len;
+
 	parent_inode->i_mtime = parent_inode->i_ctime = CURRENT_TIME;
 	printk("lab5fs_add_entry (debug): after parent assignment stage\n");
 	/* Mark inode and buffer dirty and return the caller */
@@ -137,11 +139,11 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	inode = new_inode(sb);
 	if (!inode)
 		return -ENOSPC;
-	lock_kernel();
+	// lock_kernel();
 	in_info = kmalloc(sizeof(struct lab5fs_inode_info), GFP_KERNEL);
 	if (!in_info)
 	{
-		unlock_kernel();
+		// unlock_kernel();
 		iput(inode);
 		printk("lab5fs_create: couldn't find space to allocate lab5fs_sb_info\n");
 		return -ENOSPC;
@@ -149,7 +151,7 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	/* Update file offset in the event that the block read failed */
 	if (!bh_bitmap)
 	{
-		unlock_kernel();
+		// unlock_kernel();
 		printk("lab5fs_create: couldn't read inode bitmap\n");
 		return -1;
 	}
@@ -158,7 +160,7 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	printk("lab5fs_create (debug): passed bitmap block bit set\n");
 	if (ino > LAB5FS_BSIZE)
 	{
-		unlock_kernel();
+		// unlock_kernel();
 		iput(inode);
 		return -ENOSPC;
 	}
@@ -210,10 +212,10 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 		unlock_kernel();
 		return res;
 	}
-	unlock_kernel();
+
+	// unlock_kernel();
 	d_instantiate(dentry, inode);
 	printk("lab5fs_create (debug): passed inode assignment stage 2\n");
-	// set buffer to dirty
 	printk("lab5fs_create (debug): leaving lab5fs_create\n");
 	return 0;
 }
@@ -379,13 +381,13 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 
 	lock_kernel();
 
-	/* Ensure that we don't read past the boundary of a dir entry */
-	if (flip->f_pos & (sizeof(struct lab5fs_dir_entry) - 1))
-	{
-		printk("lab5fs_readdir: attempted to read beyond file where result is %llu\n", flip->f_pos & (sizeof(struct lab5fs_dir_entry) - 1));
-		unlock_kernel();
-		return -1;
-	}
+	// /* Ensure that we don't read past the boundary of a dir entry */
+	// if (flip->f_pos & (sizeof(struct lab5fs_dir_entry) - 1))
+	// {
+	// 	printk("lab5fs_readdir: attempted to read beyond file where result is %llu\n", flip->f_pos & (sizeof(struct lab5fs_dir_entry) - 1));
+	// 	unlock_kernel();
+	// 	return -1;
+	// }
 	// if (f_pos == 0)
 	// {
 	// 	filldir(dirent, ".", 1, flip->f_pos, d_ino->i_ino, DT_DIR);
@@ -398,21 +400,23 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 	// 	flip->f_pos++;
 	// }
 	/* Start reading the dentries corresponding to the inode */
-	printk("flip->f_pos is %lld d_ino->i_size is %lu\n", flip->f_pos, d_ino->i_size);
+	printk("flip->f_pos is %lld d_ino->i_size is %lu and inode number is %lu\n", flip->f_pos, d_ino->i_size, d_ino->i_ino);
 	while (flip->f_pos < d_ino->i_size)
 	{
 		/* Calculate offset within a lab5fs block */
 		b_offset = flip->f_pos & (LAB5FS_BSIZE - 1);
 
 		/* Obtain starting block number for dentries */
-		block_no = in_info->i_sblock_data;
-		printk("block no is %lu\n", block_no);
+		block_no = in_info->i_sblock_data + (flip->f_pos >> LAB5FS_BSIZE_BITS);
+
+		printk("block no is %lu and offset is %lu\n", block_no, b_offset);
 		/* Let's read the block and begin dir reading */
 		bh = sb_bread(d_ino->i_sb, block_no);
 		/* Update file offset in the event that the block read failed */
 		if (!bh)
 		{
 			flip->f_pos += LAB5FS_BSIZE - b_offset;
+			printk("skipping buffer\n");
 			continue;
 		}
 		/*  If we get here, it means that we can start performing the dir read.
@@ -423,7 +427,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 		{
 			lab5fs_dentry = (struct lab5fs_dir_entry *)(bh->b_data + b_offset);
 			/* Ensure that we don't read the empty dentries */
-			if (lab5fs_dentry->inode && lab5fs_dentry->rec_len)
+			if (lab5fs_dentry->inode)
 			{
 				// printk("lab5fs_readdir: calling filldir on name %s and inode %lu\n", lab5fs_dentry->name, lab5fs_dentry->inode);
 				if (filldir(dirent, lab5fs_dentry->name, lab5fs_dentry->namelen, flip->f_pos, lab5fs_dentry->inode, DT_UNKNOWN) < 0)
@@ -438,7 +442,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 			}
 			else
 			{
-				printk("lab5fs_readdir: skipped filldir with inode %lu\n", lab5fs_dentry->inode);
+				printk("lab5fs_readdir: skipped filldir with inode %lu and name %s\n", lab5fs_dentry->inode, lab5fs_dentry->name);
 				b_offset += sizeof(lab5fs_dentry);
 				flip->f_pos += sizeof(lab5fs_dentry);
 			}
@@ -512,7 +516,9 @@ void lab5fs_read_inode(struct inode *inode)
 	inode->u.generic_ip = in_info;
 	inode->i_uid = di->i_uid;
 	inode->i_gid = di->i_gid;
-	inode->i_size = di->i_size;
+	inode->i_size = ino == LAB5FS_ROOT_INODE ? LAB5FS_BSIZE : di->i_size;
+	inode->i_nlink = ino == LAB5FS_ROOT_INODE ? 2 : di->i_links_count;
+	inode->i_blksize = LAB5FS_BSIZE;
 	inode->i_blocks = di->i_blocks;
 	inode->i_atime.tv_sec = di->i_atime;
 	inode->i_mtime.tv_sec = di->i_mtime;

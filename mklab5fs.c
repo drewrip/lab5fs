@@ -119,14 +119,14 @@ int main(int argc, char *argv[])
     memset(&root_inode, 0, sizeof(root_inode));
     root_inode.i_mode = S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
     root_inode.i_uid = 0;
-    root_inode.i_size = 24; // size of dentries
+    // root_inode.i_size = LAB5FS_BSIZE; // default size
     now.tv_sec = time(NULL);
     root_inode.i_atime = now.tv_sec;
     root_inode.i_ctime = now.tv_sec;
     root_inode.i_mtime = 0;
     root_inode.i_dtime = 0;
     root_inode.i_gid = 0;
-    root_inode.i_links_count = 1;
+    root_inode.i_links_count = 2;
     root_inode.i_blocks = 1;
     if ((cmp = lseek(fd, offset, SEEK_SET)) < 0 || cmp != offset)
     {
