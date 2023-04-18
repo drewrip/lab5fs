@@ -258,7 +258,7 @@ static int lab5fs_unlink(struct inode *dir, struct dentry *dentry)
 
 	printk("Inside lab5fs_unlink\n");
 	inode = dentry->d_inode;
-	/* Also skipping a lock_kernel() here */
+	lock_kernel();
 
 	bh = lab5fs_find_entry(dir, dentry->d_name.name, dentry->d_name.len, &de);
 	if (!bh || de->inode != inode->i_ino)
@@ -334,6 +334,8 @@ static struct buffer_head *lab5fs_find_entry(struct inode *dir, const char *name
 			offset += de->rec_len;
 		else
 			offset += sizeof(struct lab5fs_dir_entry);
+
+		printk("lab5fs_find_entry: checking %s\n");
 		if (de->inode && !memcmp(name, de->name, namelen))
 		{
 			printk("lab5fs_find_entry: found dentry for inode %lu and name %s\n", de->inode, name);
@@ -585,7 +587,49 @@ int lab5fs_write_inode(struct inode *inode, int unused)
 
 {
 	printk("Inside lab5fs_write_inode\n");
-	return -1;
+	unsigned long ino = inode->i_ino;
+	struct lab5fs_inode* di;
+	struct buffer_head* bh;
+	int block, off;
+	
+	if(ino < LAB5FS_ROOT_INODE){
+		printk("bad inode number\n");
+		return -EIO;
+	}
+	lock_kernel();
+	block = (ino -LAB5FS_ROOT_INODE)/LAB5FS_INODES_PER_BLOCK + 1;
+	bh = sb_bread(inode->i_sb, block);
+	if(!bh){
+		printk("unable to read inode\n");
+		unlock_kernel();
+		return -EIO;
+	}
+	
+	off = (ino - LAB5FS_ROOT_INODE) % LAB5FS_INODES_PER_BLOCK;
+	di = (struct lab5fs_inode*)bh->b_data + off;
+	
+//	if(inode->i_ino == LAB5FS_ROOT_INODE)
+//		di->i_vtype = LAB5FS_VDIR;
+//	else
+//		di->i_vtype = LAB5FS_VREG;
+
+	di->i_ino = inode->i_ino;
+	di->i_mode = inode->i_mode;
+	di->i_uid = inode->i_uid;
+	di->i_gid = inode->i_gid;
+	di->i_links_count = inode->i_nlink;
+	di->i_atime = inode->i_atime.tv_sec;
+	di->i_mtime = inode->i_mtime.tv_sec;
+	di->i_ctime = inode->i_ctime.tv_sec;
+	//di->i_sblock_data = LAB5FS_I(inode)->i_sblock_data;
+	//di->i_eblock_data = LAB5FS_I(inode)->i_eblock_data;
+	//di->i_eoffset = di->i_sblock_data * LAB5FS_BSIZE + inode->i_size - 1;
+
+	mark_buffer_dirty(bh);
+	brelse(bh);
+	unlock_kernel();
+	return 0;
+
 }
 struct super_operations lab5fs_sops = {
 	.read_inode = lab5fs_read_inode,
