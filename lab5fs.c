@@ -55,7 +55,7 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 			printk("lab5fs_add_entry: couldn't find space for dentry in block %lu\n", block_no);
 			return -ENOSPC;
 		}
-		printk("lab5fs_add_entry (debug): before second for loop stage\n");
+
 		/* If we get here, that means that there might be space, so we look for a free chunk within the block */
 		for (; offset < LAB5FS_BSIZE; offset += current_de_rec_len)
 		{
@@ -65,14 +65,14 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 			/* If inode number isn't set and the chunk's size can accomodate out entry, we presist the data */
 			current_de_rec_len = current_lab5fs_de->rec_len;
 			printk("lab5fs_add_entry (debug): after current_lab5fs_de stage\n");
-			if (!current_lab5fs_de->inode && current_de_rec_len >= future_de_rec_len)
+			if (!current_lab5fs_de->inode)
 				goto found_chunk;
 			/*  If the last statement didn't pass, don't panic, we can still find space.
 			 *  Let's see if at least the curent entry has some padding that can fit our entry.
 			 */
 			current_de_aligned_rec_len = REC_LEN_ALIGN_FOUR(current_lab5fs_de->namelen);
-			if (current_de_rec_len >= future_de_rec_len + current_de_aligned_rec_len)
-				goto found_chunk;
+			// if (current_de_rec_len >= future_de_rec_len + current_de_aligned_rec_len)
+			// 	goto found_chunk;
 		}
 		brelse(bh_dir);
 	}
@@ -193,14 +193,15 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	}
 	inode->i_nlink = 1;
 	inode->u.generic_ip = in_info;
-	in_info->i_sblock_data = INODE_TABLE_BLOCK_NO + 1;
-	in_info->i_eblock_data = in_info->i_sblock_data + 1;
+	in_info->i_sblock_data = sb_info->s_first_data_block;
+	in_info->i_eblock_data = sb_info->s_blocks_count - 1;
 
 	printk("lab5fs_create (debug): passed inode assignment stage 1\n");
 	insert_inode_hash(inode);
 	mark_inode_dirty(inode);
 	/* Add dentry to data block to establish the inode link */
 	res = lab5fs_add_entry(dentry, inode);
+
 	if (res)
 	{
 		inode->i_nlink--;
@@ -221,21 +222,22 @@ static int lab5fs_unlink(struct inode *dir, struct dentry *dentry)
 {
 	/** TODO: Complete function*/
 	int error = -ENOENT;
-	struct inode* inode;
-	struct buffer_head* bh;
-	struct lab5fs_dir_entry* de;
+	struct inode *inode;
+	struct buffer_head *bh;
+	struct lab5fs_dir_entry *de;
 
 	printk("Inside lab5fs_unlink\n");
 	inode = dentry->d_inode;
 	/* Also skipping a lock_kernel() here */
 
 	bh = lab5fs_find_entry(dir, dentry->d_name.name, dentry->d_name.len, &de);
-	if(!bh || de->inode != inode->i_ino)
-		goto out_brelse;	
+	if (!bh || de->inode != inode->i_ino)
+		goto out_brelse;
 
-	if(!inode->i_nlink){
+	if (!inode->i_nlink)
+	{
 		printk("unlinking non-existent file %s\n", inode->i_sb->s_id);
-		inode->i_nlink = 1;	
+		inode->i_nlink = 1;
 	}
 	de->inode = 0;
 	mark_buffer_dirty(bh);
@@ -254,13 +256,14 @@ out_brelse:
 static int lab5fs_link(struct dentry *old_dentry, struct inode *dir,
 					   struct dentry *dentry)
 {
-	struct inode* inode = old_dentry->d_inode;
+	struct inode *inode = old_dentry->d_inode;
 	int err;
 
-	lock_kernel();	
+	lock_kernel();
 	/* BFS does some locking here via lock_kernel(), gonna omit for now*/
 	err = lab5fs_add_entry(dentry, dir);
-	if(err){
+	if (err)
+	{
 		printk("ERROR linking\n");
 		return err;
 	}
@@ -374,7 +377,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 	unsigned long block_no;
 	in_info = (struct lab5fs_inode_info *)(d_ino->u.generic_ip);
 	printk("Inside lab5fs_readdir where f_pos is %lld and d_ino->i_size is %llu\n", f_pos, d_ino->i_size);
-	
+
 	lock_kernel();
 
 	/* Ensure that we don't read past the boundary of a dir entry */
@@ -396,6 +399,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 	// 	flip->f_pos++;
 	// }
 	/* Start reading the dentries corresponding to the inode */
+	printk("flip->f_pos is %lld d_ino->i_size is %lu\n", flip->f_pos, d_ino->i_size);
 	while (flip->f_pos < d_ino->i_size)
 	{
 		/* Calculate offset within a lab5fs block */
@@ -546,8 +550,15 @@ static void lab5fs_put_super(struct super_block *sb)
 // static void lab5fs_write_super(struct super_block *sb)
 // {
 // }
+int lab5fs_write_inode(struct inode *inode, int unused)
+
+{
+	printk("Inside lab5fs_write_inode\n");
+	return -1;
+}
 struct super_operations lab5fs_sops = {
 	.read_inode = lab5fs_read_inode,
+	.write_inode = lab5fs_write_inode,
 	.clear_inode = lab5fs_clear_inode,
 	.put_super = lab5fs_put_super,
 };

@@ -119,7 +119,7 @@ int main(int argc, char *argv[])
     memset(&root_inode, 0, sizeof(root_inode));
     root_inode.i_mode = S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
     root_inode.i_uid = 0;
-    root_inode.i_size = 24; // size of dentries
+    root_inode.i_size = 128; // size of dentries
     now.tv_sec = time(NULL);
     root_inode.i_atime = now.tv_sec;
     root_inode.i_ctime = now.tv_sec;
