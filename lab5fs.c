@@ -22,7 +22,7 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 	struct buffer_head *bh_dir;
 	struct lab5fs_inode_info *in_info;
 	struct lab5fs_dir_entry *current_lab5fs_de;
-	int offset = 0, block_no = 0, data_sblock_no, data_eblock_no;
+	int offset, block_no = 0, data_sblock_no, data_eblock_no;
 	struct inode *parent_inode = dentry->d_parent->d_inode;
 	const char *name = dentry->d_name.name;
 	int namelen = dentry->d_name.len;
@@ -57,13 +57,14 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 		}
 
 		/* If we get here, that means that there might be space, so we look for a free chunk within the block */
+		offset = 0;
 		for (; offset < LAB5FS_BSIZE; offset += current_de_rec_len)
 		{
 			/* Let's obtain thet lab5fs dentry from disk to check if it's empty */
 			printk("lab5fs_add_entry (debug): before current_lab5fs_de stage\n");
 			current_lab5fs_de = (struct lab5fs_dir_entry *)(bh_dir->b_data + offset);
 			/* If inode number isn't set and the chunk's size can accomodate out entry, we presist the data */
-			current_de_rec_len = current_lab5fs_de->rec_len;
+			current_de_rec_len = sizeof(struct lab5fs_dir_entry);
 			printk("lab5fs_add_entry (debug): after current_lab5fs_de stage\n");
 			if (!current_lab5fs_de->inode)
 				goto found_chunk;
@@ -81,9 +82,7 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 	return -ENOSPC;
 
 found_chunk:
-	printk("lab5fs_add_entry (debug): before found_chunk stage\n");
-	current_lab5fs_de->rec_len = current_de_aligned_rec_len;
-	printk("lab5fs_add_entry (debug): after 1 task in found_chunk stage\n");
+	current_lab5fs_de->rec_len = REC_LEN_ALIGN_FOUR(namelen);
 	/* Handle case where we're adding the dentry into the chunk of another dentry */
 	if (current_lab5fs_de->inode)
 	{
@@ -104,7 +103,7 @@ found_chunk:
 	printk("lab5fs_add_entry (debug): after parent assignment stage\n");
 	/* Mark inode and buffer dirty and return the caller */
 	mark_inode_dirty(parent_inode);
-	mark_buffer_dirty(bh_dir);
+	// mark_buffer_dirty(bh_dir);
 	brelse(bh_dir);
 	printk("leaving lab5fs_add_entry after finding space\n");
 	return 0;
@@ -435,7 +434,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 				}
 				b_offset += lab5fs_dentry->rec_len;
 				flip->f_pos += lab5fs_dentry->rec_len;
-				printk("lab5fs_readdir: done calling filldir and for inode %lu, name %s, namelen is %c, and rec_len %hu\n", lab5fs_dentry->inode, lab5fs_dentry->name, lab5fs_dentry->namelen, lab5fs_dentry->rec_len);
+				printk("lab5fs_readdir: done calling filldir and for inode %lu, name %s, namelen is %hu, and rec_len %hu\n", lab5fs_dentry->inode, lab5fs_dentry->name, lab5fs_dentry->namelen, lab5fs_dentry->rec_len);
 			}
 			else
 			{
