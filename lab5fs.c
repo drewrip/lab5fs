@@ -103,7 +103,7 @@ found_chunk:
 	printk("lab5fs_add_entry (debug): after parent assignment stage\n");
 	/* Mark inode and buffer dirty and return the caller */
 	mark_inode_dirty(parent_inode);
-	// mark_buffer_dirty(bh_dir);
+	mark_buffer_dirty(bh_dir);
 	brelse(bh_dir);
 	printk("leaving lab5fs_add_entry after finding space\n");
 	return 0;
@@ -382,7 +382,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 	/* Ensure that we don't read past the boundary of a dir entry */
 	if (flip->f_pos & (sizeof(struct lab5fs_dir_entry) - 1))
 	{
-		printk("lab5fs_readdir: attempted to read beyond file\n");
+		printk("lab5fs_readdir: attempted to read beyond file where result is %llu\n", flip->f_pos & (sizeof(struct lab5fs_dir_entry) - 1));
 		unlock_kernel();
 		return -1;
 	}
