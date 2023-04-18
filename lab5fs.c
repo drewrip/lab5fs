@@ -8,14 +8,43 @@
 
 /* Declare static functions for file system operations */
 static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidata *nd);
-static int lab5fs_link(struct dentry *old_dentry, struct inode *dir,
-					   struct dentry *dentry);
+static int lab5fs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *dentry);
 static int lab5fs_unlink(struct inode *dir, struct dentry *dentry);
 static struct dentry *lab5fs_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd);
 static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir);
 static struct buffer_head *lab5fs_find_entry(struct inode *dir, const char *name, int namelen, struct lab5fs_dir_entry **res_dir);
+static int lab5fs_readpage(struct file *file, struct page *page);
+static int lab5fs_writepage(struct page *page, struct writeback_control *wbc);
+static int lab5fs_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to);
+static sector_t lab5fs_bmap(struct address_space *mapping, sector_t block);
 
 MODULE_LICENSE("GPL");
+static int lab5fs_get_block(struct inode *inode, sector_t block,
+							struct buffer_head *bh_result, int create)
+{
+	return 0;
+}
+static int lab5fs_readpage(struct file *file, struct page *page)
+{
+	printk("lab5fs_readpage (debug): inside lab5fs_readpage\n");
+	return block_read_full_page(page, lab5fs_get_block);
+}
+static int lab5fs_writepage(struct page *page, struct writeback_control *wbc)
+{
+	printk("lab5fs_writepage (debug): inside lab5fs_writepage\n");
+	return block_write_full_page(page, lab5fs_get_block, wbc);
+}
+static int lab5fs_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
+{
+	printk("lab5fs_prepare_write (debug): inside lab5fs_prepare_write\n");
+	return block_prepare_write(page, from, to, lab5fs_get_block);
+}
+static sector_t lab5fs_bmap(struct address_space *mapping, sector_t block)
+{
+	printk("lab5fs_bmap (debug): inside lab5fs_bmap\n");
+	return generic_block_bmap(mapping, block, lab5fs_get_block);
+}
+
 static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 {
 	printk("lab5fs_add_entry (debug): inside lab5fs_add_entry\n");
@@ -455,9 +484,6 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 	return 0;
 }
 
-static struct address_space_operations lab5fs_aops = {
-
-};
 /** TODO: Clean up function and add/remove logic as needed */
 void lab5fs_read_inode(struct inode *inode)
 {
@@ -712,4 +738,12 @@ struct file_operations lab5fs_dir_operations = {
 	.release = dcache_dir_close,
 	.llseek = dcache_dir_lseek,
 	.read = generic_read_dir,
+};
+static struct address_space_operations lab5fs_aops = {
+	.writepage = lab5fs_writepage,
+	.prepare_write = lab5fs_prepare_write,
+	.commit_write = generic_commit_write,
+	.sync_page = block_sync_page,
+	.readpage = lab5fs_readpage,
+	.bmap = lab5fs_bmap,
 };
