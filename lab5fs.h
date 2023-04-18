@@ -4,7 +4,6 @@
 #define LAB5FS_BSIZE (1 << LAB5FS_BSIZE_BITS) /* 1024 bytes per block*/
 #define LAB5FS_INODES_PER_BLOCK 8
 #define LAB5FS_MAGIC 0xCAFED00D
-#define LAB5FS_ROOT_INO 1
 #define INODE_TABLE_BLOCK_NO 3
 #define INODE_BITMAP_BLOCK_NO 2
 #define MAX_FILE_NAME_LENGTH 255
@@ -36,6 +35,8 @@ struct lab5fs_super_block
 struct lab5fs_sb_info
 {
     struct buffer_head *inode_bitmap_bh;
+    unsigned long s_first_data_block; /* First Data Block */
+    unsigned long s_blocks_count;     /* Blocks count */
 };
 /* lab5fs inode layout on disk */
 struct lab5fs_inode
@@ -59,9 +60,8 @@ struct lab5fs_inode
  */
 struct lab5fs_inode_info
 {
-    unsigned long i_sblock_dentries; /* Starting block of dir entries */
-    unsigned long i_sblock_data;     /* Starting block of dir entries */
-    unsigned long i_eblock_data;     /* Starting block of dir entries */
+    unsigned long i_sblock_data; /* Starting block of dir entries */
+    unsigned long i_eblock_data; /* Starting block of dir entries */
 };
 /* lab5fs dentry layout on disk */
 struct lab5fs_dir_entry

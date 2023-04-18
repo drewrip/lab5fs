@@ -20,7 +20,7 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 	struct buffer_head *bh_dir;
 	struct lab5fs_inode_info *in_info;
 	struct lab5fs_dir_entry *current_lab5fs_de;
-	int offset = 0, block_no, data_sblock_no, data_eblock_no;
+	int offset = 0, block_no = 0, data_sblock_no, data_eblock_no;
 	struct inode *parent_inode = dentry->d_parent->d_inode;
 	const char *name = dentry->d_name.name;
 	int namelen = dentry->d_name.len;
@@ -30,15 +30,19 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 	in_info = inode->u.generic_ip;
 	data_sblock_no = in_info->i_sblock_data;
 	data_eblock_no = in_info->i_eblock_data;
-
+	printk("lab5fs_add_entry: sblock %lu and eblock %lu\n", data_sblock_no, data_eblock_no);
+	printk("lab5fs_add_entry (debug):passed assignment stage\n");
 	if (!namelen)
 	{
 		printk("lab5fs_add_entry: entry doesn't exist\n");
 		return -ENOENT;
 	}
 	if (namelen > MAX_FILE_NAME_LENGTH)
+	{
 		printk("lab5fs_add_entry: entry name exceed max name length\n");
-	return -ENAMETOOLONG;
+		return -ENAMETOOLONG;
+	}
+	printk("lab5fs_add_entry (debug): before for loop stage\n");
 	/* Iterate through data blocks until we find a free chunk */
 	for (block_no = data_sblock_no; block_no <= data_eblock_no; block_no++)
 	{
@@ -46,16 +50,19 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 		bh_dir = sb_bread(inode->i_sb, block_no);
 		if (!bh_dir)
 		{
-			printk("lab5fs_add_entry: couldn't find space for dentry\n");
+			printk("lab5fs_add_entry: couldn't find space for dentry in block %lu\n", block_no);
 			return -ENOSPC;
 		}
+		printk("lab5fs_add_entry (debug): before second for loop stage\n");
 		/* If we get here, that means that there might be space, so we look for a free chunk within the block */
 		for (; offset < LAB5FS_BSIZE; offset += current_de_rec_len)
 		{
 			/* Let's obtain thet lab5fs dentry from disk to check if it's empty */
+			printk("lab5fs_add_entry (debug): before current_lab5fs_de stage\n");
 			current_lab5fs_de = (struct lab5fs_dir_entry *)(bh_dir->b_data + offset);
 			/* If inode number isn't set and the chunk's size can accomodate out entry, we presist the data */
 			current_de_rec_len = current_lab5fs_de->rec_len;
+			printk("lab5fs_add_entry (debug): after current_lab5fs_de stage\n");
 			if (!current_lab5fs_de->inode && current_de_rec_len >= future_de_rec_len)
 				goto found_chunk;
 			/*  If the last statement didn't pass, don't panic, we can still find space.
@@ -72,15 +79,19 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode)
 	return -ENOSPC;
 
 found_chunk:
+	printk("lab5fs_add_entry (debug): before found_chunk stage\n");
 	current_lab5fs_de->rec_len = current_de_aligned_rec_len;
+	printk("lab5fs_add_entry (debug): after 1 task in found_chunk stage\n");
 	/* Handle case where we're adding the dentry into the chunk of another dentry */
 	if (current_lab5fs_de->inode)
 	{
-		struct lab5fs_dir_entry *tmp_de = (struct lab5fs_dir_entry *)((char *)(current_de_rec_len + current_lab5fs_de->namelen));
-		tmp_de->rec_len = current_de_aligned_rec_len - current_lab5fs_de->namelen;
-
+		printk("lab5fs_add_entry (debug): inside if block in found_chunk stage\n");
+		struct lab5fs_dir_entry *tmp_de = (struct lab5fs_dir_entry *)((char *)current_lab5fs_de + current_de_aligned_rec_len);
+		tmp_de->rec_len = current_lab5fs_de->rec_len - current_de_aligned_rec_len;
+		current_lab5fs_de->rec_len = current_de_aligned_rec_len;
 		current_lab5fs_de = tmp_de;
 	}
+	printk("lab5fs_add_entry (debug): after found_chunk stage\n");
 	current_lab5fs_de->inode = inode->i_ino;
 	current_lab5fs_de->namelen = namelen;
 	memcpy(current_lab5fs_de->name, name, namelen);
@@ -88,6 +99,7 @@ found_chunk:
 	/* Update parent inode */
 	parent_inode->i_size += current_lab5fs_de->rec_len;
 	parent_inode->i_mtime = parent_inode->i_ctime = CURRENT_TIME;
+	printk("lab5fs_add_entry (debug): after parent assignment stage\n");
 	/* Mark inode and buffer dirty and return the caller */
 	mark_inode_dirty(parent_inode);
 	mark_buffer_dirty(bh_dir);
@@ -154,15 +166,30 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	inode->i_ino = ino;
 	inode->i_size = 0;
 	inode->i_blocks = 0;
+	inode->i_sb = sb;
+	inode->i_blksize = LAB5FS_BSIZE;
+	inode->i_blkbits = LAB5FS_BSIZE_BITS;
 
 	inode->i_uid = current->fsuid;
 	inode->i_gid = current->fsgid;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_op = &lab5fs_file_inops;
-	inode->i_fop = &lab5fs_dir_operations;
-	inode->i_mapping->a_ops = &lab5fs_aops;
+	if (S_ISREG(inode->i_mode))
+	{
+		inode->i_fop = &lab5fs_file_operations;
+		inode->i_mapping->a_ops = &lab5fs_aops;
+		inode->i_mode |= S_IFREG;
+	}
+	else if (S_ISDIR(inode->i_mode))
+	{
+		inode->i_fop = &lab5fs_dir_operations;
+		inode->i_mode |= S_IFDIR;
+	}
 	inode->i_nlink = 1;
 	inode->u.generic_ip = in_info;
+	in_info->i_sblock_data = INODE_TABLE_BLOCK_NO + 1;
+	in_info->i_eblock_data = in_info->i_sblock_data + 1;
+
 	printk("lab5fs_create (debug): passed inode assignment stage 1\n");
 	insert_inode_hash(inode);
 	mark_inode_dirty(inode);
@@ -317,7 +344,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 		b_offset = flip->f_pos & (LAB5FS_BSIZE - 1);
 
 		/* Obtain starting block number for dentries */
-		block_no = in_info->i_sblock_dentries;
+		block_no = in_info->i_sblock_data;
 		printk("block no is %lu\n", block_no);
 		/* Let's read the block and begin dir reading */
 		bh = sb_bread(d_ino->i_sb, block_no);
@@ -372,24 +399,26 @@ void lab5fs_read_inode(struct inode *inode)
 	struct lab5fs_inode *di;
 	struct buffer_head *bh;
 	struct lab5fs_inode_info *in_info;
-	int block, off;
+	struct lab5fs_sb_info *sb_info = (struct lab5fs_sb_info *)inode->i_sb->s_fs_info;
+	int offset, block_no;
 
 	if (!inode)
 	{
 		printk("lab5fs_read_inode: attempted to read NULL inode\n");
 		return;
 	}
-	block = (ino - LAB5FS_ROOT_INO) / LAB5FS_INODES_PER_BLOCK + 1;
+	printk("lab5fs_read_inode: ino is %lu\n", ino);
+	block_no = (ino - LAB5FS_ROOT_INODE) / (LAB5FS_BSIZE / sizeof(struct lab5fs_inode));
 	/* Get corrersponding block number to the inode number so that we read from the right place */
-	bh = sb_bread(inode->i_sb, ((ino * sizeof(struct lab5fs_inode)) / LAB5FS_BSIZE) + INODE_TABLE_BLOCK_NO);
+	bh = sb_bread(inode->i_sb, block_no + INODE_TABLE_BLOCK_NO);
 	if (!bh)
 	{
 		printk(KERN_ERR "lab5fs_read_inode: sb_bread returned null for block sector\n");
 		return;
 	}
 
-	off = (ino - LAB5FS_ROOT_INO) % LAB5FS_INODES_PER_BLOCK;
-	di = (struct lab5fs_inode *)bh->b_data;
+	offset = (ino - LAB5FS_ROOT_INODE) % (LAB5FS_BSIZE / sizeof(struct lab5fs_inode));
+	di = (struct lab5fs_inode *)bh->b_data + offset;
 
 	inode->i_mode = di->i_mode;
 	printk("lab5fs_read_inode: inode->i_mode is 0x%x, di->i_mode is 0x%x, and initialized mode is 0x%x\n", inode->i_mode, di->i_mode, S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
@@ -414,9 +443,8 @@ void lab5fs_read_inode(struct inode *inode)
 		printk("lab5fs_read_inode: couldn't allocate struct lab5fs_inode_info\n");
 		goto done;
 	}
-	in_info->i_sblock_dentries = INODE_TABLE_BLOCK_NO + 1;
-	in_info->i_sblock_data = INODE_TABLE_BLOCK_NO + 1;
-	in_info->i_eblock_data = in_info->i_sblock_data + 1;
+	in_info->i_sblock_data = sb_info->s_first_data_block;
+	in_info->i_eblock_data = sb_info->s_blocks_count - in_info->i_sblock_data - 1;
 
 	inode->u.generic_ip = in_info;
 	inode->i_uid = di->i_uid;
@@ -509,6 +537,8 @@ static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 	}
 
 	sb_info->inode_bitmap_bh = bh_bitmap;
+	sb_info->s_first_data_block = lb5_sb->s_first_data_block;
+	sb_info->s_blocks_count = lb5_sb->s_blocks_count;
 
 	sb->s_magic = LAB5FS_MAGIC;
 	sb->s_op = &lab5fs_sops;
@@ -596,9 +626,14 @@ static struct file_operations lab5fs_file_operations = {
 	.write = generic_file_write,
 	.mmap = generic_file_mmap,
 	.open = generic_file_open,
+	.fsync = file_fsync,
 };
 struct file_operations lab5fs_dir_operations = {
 	.read = generic_read_dir,
 	.readdir = lab5fs_readdir,
 	.fsync = file_fsync,
+	.open = dcache_dir_open,
+	.release = dcache_dir_close,
+	.llseek = dcache_dir_lseek,
+	.read = generic_read_dir,
 };

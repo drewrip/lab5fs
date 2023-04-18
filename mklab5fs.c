@@ -20,7 +20,9 @@ int validate_image(const char *pathname, unsigned long *block_count)
         return res;
     }
     /* Let's get the number blocks in the device */
-    *block_count = image_stat.st_size / LAB5FS_BSIZE;
+    *block_count = (image_stat.st_size / LAB5FS_BSIZE) - 3;
+    if (!(*block_count))
+        return -1;
     /* Ensure image has right permissions */
     if (res = access(pathname, W_OK))
     {
@@ -36,7 +38,7 @@ int main(int argc, char *argv[])
     struct timespec now;
     struct lab5fs_super_block sb;
     struct lab5fs_inode root_inode;
-
+    double block_ino_ratio = sizeof(struct lab5fs_inode) / sizeof(struct lab5fs_dir_entry);
     off_t offset = 0;
 
     // Check arguments
@@ -49,9 +51,10 @@ int main(int argc, char *argv[])
     if (validate_image(argv[1], &block_count))
         exit(EXIT_FAILURE);
     /* Obtain the max number of nodes for this device.
-     * Will need to change block_count - 1
+     * Will need to change block_count - 3
      * based on how many blocks are used for other purposes than inodes */
-    max_num_of_inodes = (block_count / sizeof(struct lab5fs_inode) * (block_count - 1));
+    max_num_of_inodes = (int)((double)block_count * block_ino_ratio);
+    fprintf(stdout, "max num of inodes is %lu and block_count is %lu\n", max_num_of_inodes, block_count);
     // Open device or file
     fd = open(argv[1], O_WRONLY | O_EXCL);
     if (fd < 0)
@@ -68,7 +71,8 @@ int main(int argc, char *argv[])
     sb.s_blocks_count = block_count;
     sb.s_inodes_count = max_num_of_inodes;
     sb.s_free_inodes_count = max_num_of_inodes - 1;
-    sb.s_free_blocks_count = block_count - 1;
+    sb.s_free_blocks_count = block_count - 3;
+    sb.s_first_data_block = (max_num_of_inodes >> LAB5FS_BSIZE_BITS) + INODE_TABLE_BLOCK_NO - 1;
     lab5fs_bitmap data_block_bitmap, inode_bitmap;
     struct lab5fs_dir_entry dentry;
 
@@ -139,7 +143,7 @@ int main(int argc, char *argv[])
     offset += res;
     printf("Finished writing %lu bytes to device's root inode\n", res);
     /* Update offset to write in data blocks, so skip inode tables */
-    offset += (LAB5FS_BSIZE - res);
+    offset += (LAB5FS_BSIZE - res) + sb.s_first_data_block - 1;
     if ((cmp = lseek(fd, offset, SEEK_SET)) < 0 || cmp != offset)
     {
         fprintf(stderr, "Couldn't return to the right offset in file descriptor\n");
