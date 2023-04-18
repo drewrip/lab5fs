@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
     struct timespec now;
     struct lab5fs_super_block sb;
     struct lab5fs_inode root_inode;
-    double block_ino_ratio = sizeof(struct lab5fs_inode) / sizeof(struct lab5fs_dir_entry);
+    double block_ino_ratio = (double)sizeof(struct lab5fs_inode) / (double)sizeof(struct lab5fs_dir_entry);
     off_t offset = 0;
 
     // Check arguments
@@ -71,11 +71,11 @@ int main(int argc, char *argv[])
     sb.s_blocks_count = block_count;
     sb.s_inodes_count = max_num_of_inodes;
     sb.s_free_inodes_count = max_num_of_inodes - 1;
-    sb.s_free_blocks_count = block_count - 3;
-    sb.s_first_data_block = (max_num_of_inodes >> LAB5FS_BSIZE_BITS) + INODE_TABLE_BLOCK_NO - 1;
+    sb.s_free_blocks_count = block_count;
+    sb.s_first_data_block = max_num_of_inodes + INODE_TABLE_BLOCK_NO - 1;
     lab5fs_bitmap data_block_bitmap, inode_bitmap;
     struct lab5fs_dir_entry dentry;
-
+    fprintf(stdout, "sb.s_first_data_block is %lu\n", sb.s_first_data_block);
     // Write super block to device or file
     if ((res = write(fd, &sb, sizeof(sb))) < 0)
     {
@@ -143,7 +143,8 @@ int main(int argc, char *argv[])
     offset += res;
     printf("Finished writing %lu bytes to device's root inode\n", res);
     /* Update offset to write in data blocks, so skip inode tables */
-    offset += (LAB5FS_BSIZE - res) + sb.s_first_data_block - 1;
+    offset += (LAB5FS_BSIZE - res) + (max_num_of_inodes - 2) * LAB5FS_BSIZE;
+    printf("New offset is %lu\n", offset);
     if ((cmp = lseek(fd, offset, SEEK_SET)) < 0 || cmp != offset)
     {
         fprintf(stderr, "Couldn't return to the right offset in file descriptor\n");
