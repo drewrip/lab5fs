@@ -656,14 +656,13 @@ static void lab5fs_put_super(struct super_block *sb)
 }
 
 int lab5fs_write_inode(struct inode *inode, int unused)
-
 {
-	return -1;
 	printk("Inside lab5fs_write_inode\n");
 	unsigned long ino = inode->i_ino;
 	struct lab5fs_inode *di;
 	struct buffer_head *bh;
 	int block, off;
+
 
 	if (ino < LAB5FS_ROOT_INODE)
 	{
@@ -672,7 +671,8 @@ int lab5fs_write_inode(struct inode *inode, int unused)
 	}
 	lock_kernel();
 	block = (ino - LAB5FS_ROOT_INODE) / (LAB5FS_BSIZE / sizeof(struct lab5fs_inode));
-	bh = sb_bread(inode->i_sb, block);
+	printk("lab5fs_write_inode: writing block=%lu\n", block);
+	bh = sb_bread(inode->i_sb, block + INODE_TABLE_BLOCK_NO);
 	if (!bh)
 	{
 		printk("unable to read inode\n");
@@ -680,7 +680,8 @@ int lab5fs_write_inode(struct inode *inode, int unused)
 		return -EIO;
 	}
 
-	off = (ino - LAB5FS_ROOT_INODE) % (LAB5FS_BSIZE / sizeof(struct lab5fs_inode));
+	off = (ino - LAB5FS_ROOT_INODE) % (LAB5FS_BSIZE / sizeof(struct lab5fs_inode)); 
+	printk("lab5fs_write_inode: writing offset=%lu\n", off);
 	di = (struct lab5fs_inode *)bh->b_data + off;
 
 	//	if(inode->i_ino == LAB5FS_ROOT_INODE)
@@ -705,6 +706,7 @@ int lab5fs_write_inode(struct inode *inode, int unused)
 	unlock_kernel();
 	return 0;
 }
+
 struct super_operations lab5fs_sops = {
 	.read_inode = lab5fs_read_inode,
 	.write_inode = lab5fs_write_inode,
