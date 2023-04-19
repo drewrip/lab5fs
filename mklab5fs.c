@@ -67,6 +67,7 @@ int main(int argc, char *argv[])
     memset(&sb, 0, sizeof(sb));
     sb.s_magic = LAB5FS_MAGIC;
     sb.s_block_size = LAB5FS_BSIZE;
+    sb.s_blocksize_bits = LAB5FS_BSIZE_BITS;
     sb.s_inode_size = sizeof(struct lab5fs_inode);
     sb.s_blocks_count = block_count;
     sb.s_inodes_count = max_num_of_inodes;

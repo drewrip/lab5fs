@@ -24,10 +24,11 @@ struct lab5fs_super_block
     unsigned long s_free_inodes_count; /* Free inodes count */
     unsigned long s_first_data_block;  /* First Data Block */
     unsigned long s_block_size;        /* Block size */
+    unsigned long s_blocksize_bits;    /* Blocksize bits */
 
     unsigned short s_state;                                                                   /* File system state */
     unsigned short s_inode_size;                                                              /* size of inode structure */
-    char s_reserved[LAB5FS_BSIZE - (7 * sizeof(unsigned long) + 2 * sizeof(unsigned short))]; /* Padding to 1024*/
+    char s_reserved[LAB5FS_BSIZE - (8 * sizeof(unsigned long) + 2 * sizeof(unsigned short))]; /* Padding to 1024*/
 };
 /*
  * lab5fs in-memory super_block info

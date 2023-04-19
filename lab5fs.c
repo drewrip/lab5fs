@@ -347,7 +347,7 @@ static struct buffer_head *lab5fs_find_entry(struct inode *dir, const char *name
 		if (de->inode)
 		{
 			if (de->rec_len)
-				offset += 12; // temporary just for debugging change to value below
+				offset += 12;
 			// offset += de->rec_len;
 			else
 				offset += 12; // temporary just for debugging change to value below
@@ -571,7 +571,7 @@ void lab5fs_read_inode(struct inode *inode)
 	inode->i_size = ino == LAB5FS_ROOT_INODE ? LAB5FS_BSIZE : di->i_size;
 	inode->i_nlink = ino == LAB5FS_ROOT_INODE ? 2 : di->i_links_count;
 	inode->i_blksize = LAB5FS_BSIZE;
-	inode->i_blocks = di->i_blocks;
+	inode->i_blocks = ino == LAB5FS_ROOT_INODE ? 1 : di->i_blocks;
 	inode->i_atime.tv_sec = di->i_atime;
 	inode->i_mtime.tv_sec = di->i_mtime;
 	inode->i_ctime.tv_sec = di->i_ctime;
@@ -615,6 +615,7 @@ static void lab5fs_put_super(struct super_block *sb)
 int lab5fs_write_inode(struct inode *inode, int unused)
 
 {
+	return -1;
 	printk("Inside lab5fs_write_inode\n");
 	unsigned long ino = inode->i_ino;
 	struct lab5fs_inode *di;
