@@ -17,6 +17,7 @@ static int lab5fs_readpage(struct file *file, struct page *page);
 static int lab5fs_writepage(struct page *page, struct writeback_control *wbc);
 static int lab5fs_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to);
 static sector_t lab5fs_bmap(struct address_space *mapping, sector_t block);
+static void lab5fs_delete_inode(struct inode *inode);
 
 MODULE_LICENSE("GPL");
 static int lab5fs_get_block(struct inode *inode, sector_t block,
@@ -269,16 +270,18 @@ static int lab5fs_unlink(struct inode *dir, struct dentry *dentry)
 	printk("lab5fs_unlink: found entry\n");
 	if (!inode->i_nlink)
 	{
-		printk("unlinking non-existent file %s\n", inode->i_sb->s_id);
+		printk("lab5fs_unlink: attempted to unlink a non-existent file %s\n", inode->i_sb->s_id);
 		inode->i_nlink = 1;
 	}
-	memset(de, 0, de->rec_len);
-	mark_buffer_dirty(bh);
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(dir);
 	inode->i_nlink--;
 	inode->i_ctime = dir->i_ctime;
 	mark_inode_dirty(inode);
+free_dentry:
+	/* After dealing with the inode, let's handle the dentry itself. */
+	memset(de, 0, de->rec_len);
+	mark_buffer_dirty(bh);
 	error = 0;
 out_brelse:
 	brelse(bh);
@@ -604,9 +607,10 @@ static void lab5fs_delete_inode(struct inode *inode)
 	unsigned long ino = inode->i_ino;
 	struct super_block *sb = inode->i_sb;
 	struct lab5fs_sb_info *sb_info = sb->s_fs_info;
+	struct buffer_head *bh_bitmap = sb_info->inode_bitmap_bh;
 	struct lab5fs_bitmap *b_map;
 	int block_no, offset;
-	b_map = (struct lab5fs_bitmap *)sb_info->inode_bitmap_bh->b_data;
+	b_map = (struct lab5fs_bitmap *)bh_bitmap->b_data;
 
 	if (ino < LAB5FS_ROOT_INODE)
 	{
@@ -631,7 +635,7 @@ static void lab5fs_delete_inode(struct inode *inode)
 	if (lab5fs_in->i_ino)
 	{
 		clear_bit(lab5fs_in->i_ino, b_map->bitmap);
-		mark_buffer_dirty(b_map);
+		mark_buffer_dirty(bh_bitmap);
 	}
 	/* Zerop out the content of the inode */
 	memset(lab5fs_in, 0, sizeof(struct lab5fs_inode));
