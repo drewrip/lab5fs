@@ -22,6 +22,7 @@ MODULE_LICENSE("GPL");
 static int lab5fs_get_block(struct inode *inode, sector_t block,
 							struct buffer_head *bh_result, int create)
 {
+	printk("lab5fs_get_block (debug): inside lab5fs_get_block\n");
 	return 0;
 }
 static int lab5fs_readpage(struct file *file, struct page *page)
@@ -572,13 +573,18 @@ done:
 // {
 // }
 
-static void lab5fs_clear_inode(struct inode *inode)
+static void labfs_delete_inode(struct inode *inode)
 {
 	printk("Inside lab5fs_clear_inode\n");
 }
 static void lab5fs_put_super(struct super_block *sb)
 {
 	printk("Inside lab5fs_put_super\n");
+	struct lab5fs_sb_info *sb_info = sb->s_fs_info;
+	/* Release resources */
+	brelse(sb_info->inode_bitmap_bh);
+	kfree(sb_info);
+	sb->s_fs_info = NULL;
 }
 // static void lab5fs_write_super(struct super_block *sb)
 // {
@@ -588,30 +594,32 @@ int lab5fs_write_inode(struct inode *inode, int unused)
 {
 	printk("Inside lab5fs_write_inode\n");
 	unsigned long ino = inode->i_ino;
-	struct lab5fs_inode* di;
-	struct buffer_head* bh;
+	struct lab5fs_inode *di;
+	struct buffer_head *bh;
 	int block, off;
-	
-	if(ino < LAB5FS_ROOT_INODE){
+
+	if (ino < LAB5FS_ROOT_INODE)
+	{
 		printk("bad inode number\n");
 		return -EIO;
 	}
 	lock_kernel();
-	block = (ino -LAB5FS_ROOT_INODE)/LAB5FS_INODES_PER_BLOCK + 1;
+	block = (ino - LAB5FS_ROOT_INODE) / LAB5FS_INODES_PER_BLOCK + 1;
 	bh = sb_bread(inode->i_sb, block);
-	if(!bh){
+	if (!bh)
+	{
 		printk("unable to read inode\n");
 		unlock_kernel();
 		return -EIO;
 	}
-	
+
 	off = (ino - LAB5FS_ROOT_INODE) % LAB5FS_INODES_PER_BLOCK;
-	di = (struct lab5fs_inode*)bh->b_data + off;
-	
-//	if(inode->i_ino == LAB5FS_ROOT_INODE)
-//		di->i_vtype = LAB5FS_VDIR;
-//	else
-//		di->i_vtype = LAB5FS_VREG;
+	di = (struct lab5fs_inode *)bh->b_data + off;
+
+	//	if(inode->i_ino == LAB5FS_ROOT_INODE)
+	//		di->i_vtype = LAB5FS_VDIR;
+	//	else
+	//		di->i_vtype = LAB5FS_VREG;
 
 	di->i_ino = inode->i_ino;
 	di->i_mode = inode->i_mode;
@@ -621,20 +629,19 @@ int lab5fs_write_inode(struct inode *inode, int unused)
 	di->i_atime = inode->i_atime.tv_sec;
 	di->i_mtime = inode->i_mtime.tv_sec;
 	di->i_ctime = inode->i_ctime.tv_sec;
-	//di->i_sblock_data = LAB5FS_I(inode)->i_sblock_data;
-	//di->i_eblock_data = LAB5FS_I(inode)->i_eblock_data;
-	//di->i_eoffset = di->i_sblock_data * LAB5FS_BSIZE + inode->i_size - 1;
+	// di->i_sblock_data = LAB5FS_I(inode)->i_sblock_data;
+	// di->i_eblock_data = LAB5FS_I(inode)->i_eblock_data;
+	// di->i_eoffset = di->i_sblock_data * LAB5FS_BSIZE + inode->i_size - 1;
 
 	mark_buffer_dirty(bh);
 	brelse(bh);
 	unlock_kernel();
 	return 0;
-
 }
 struct super_operations lab5fs_sops = {
 	.read_inode = lab5fs_read_inode,
 	.write_inode = lab5fs_write_inode,
-	.clear_inode = lab5fs_clear_inode,
+	.delete_inode = labfs_delete_inode,
 	.put_super = lab5fs_put_super,
 };
 

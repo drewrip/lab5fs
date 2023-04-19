@@ -126,6 +126,7 @@ int main(int argc, char *argv[])
     root_inode.i_mtime = 0;
     root_inode.i_dtime = 0;
     root_inode.i_gid = 0;
+    root_inode.i_ino = LAB5FS_ROOT_INODE;
     root_inode.i_links_count = 2;
     root_inode.i_blocks = 1;
     if ((cmp = lseek(fd, offset, SEEK_SET)) < 0 || cmp != offset)

@@ -41,6 +41,7 @@ struct lab5fs_sb_info
 /* lab5fs inode layout on disk */
 struct lab5fs_inode
 {
+    unsigned short i_ino;         /* Inode number */
     unsigned short i_mode;        /* File mode */
     unsigned short i_uid;         /* Low 16 bits of Owner Uid */
     unsigned long i_size;         /* Size in bytes */
@@ -52,8 +53,8 @@ struct lab5fs_inode
     unsigned short i_links_count; /* Links count */
     unsigned long i_blocks;       /* Blocks count */
     unsigned long i_flags;        /* File flags */
-    /* 36 bytes up till this point */
-    char padding[28]; /* pad up to 64 bytes */
+    /* 34 bytes up till this point */
+    char padding[24]; /* pad up to 64 bytes */
 };
 /*
  * lab5fs in-memory inode info
