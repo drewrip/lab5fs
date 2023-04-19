@@ -97,7 +97,7 @@ static int lab5fs_add_entry(struct dentry *dentry, struct inode *inode, int ino)
 
 			if (!current_lab5fs_de->inode)
 				goto found_chunk;
-			current_de_rec_len += current_lab5fs_de->rec_len;
+			current_de_rec_len = current_lab5fs_de->rec_len;
 			printk("lab5fs_add_entry (debug): skipped over inode %lu with name %s and offset %lu\n", current_lab5fs_de->inode, current_lab5fs_de->name, current_de_rec_len);
 			/*  If the last statement didn't pass, don't panic, we can still find space.
 			 *  Let's see if at least the curent entry has some padding that can fit our entry.
@@ -272,7 +272,7 @@ static int lab5fs_unlink(struct inode *dir, struct dentry *dentry)
 		printk("unlinking non-existent file %s\n", inode->i_sb->s_id);
 		inode->i_nlink = 1;
 	}
-	de->inode = 0;
+	memset(de, 0, de->rec_len);
 	mark_buffer_dirty(bh);
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(dir);
@@ -347,10 +347,10 @@ static struct buffer_head *lab5fs_find_entry(struct inode *dir, const char *name
 		if (de->inode)
 		{
 			if (de->rec_len)
-				offset += 12;
+				offset += de->rec_len;
 			// offset += de->rec_len;
 			else
-				offset += 12; // temporary just for debugging change to value below
+				offset += sizeof(struct lab5fs_dir_entry); // temporary just for debugging change to value below
 			// offset +=sizeof(struct lab5fs_dir_entry);
 			printk("lab5fs_find_entry: checking %s where block is %lu, offset is now %lu, and inode is %lu\n", de->name, in_info->i_sblock_data + block, offset, de->inode);
 			if (de->inode && !memcmp(name, de->name, namelen))
@@ -361,7 +361,7 @@ static struct buffer_head *lab5fs_find_entry(struct inode *dir, const char *name
 			}
 		}
 		else
-			offset += 12; // temporary just for debugging change to value below
+			offset += sizeof(struct lab5fs_dir_entry); // temporary just for debugging change to value below
 		// offset +=sizeof(struct lab5fs_dir_entry);
 
 		if (offset < bh_dir->b_size)
@@ -483,7 +483,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 			if (lab5fs_dentry->inode)
 			{
 				printk("lab5fs_readdir: calling filldir on name %s, inode %lu, block is %lu, rec_len is %u, and offset is %lu\n", lab5fs_dentry->name, lab5fs_dentry->inode, block_no, lab5fs_dentry->rec_len, b_offset);
-				if (filldir(dirent, lab5fs_dentry->name, lab5fs_dentry->namelen, flip->f_pos, lab5fs_dentry->inode, DT_UNKNOWN) < 0)
+				if (filldir(dirent, lab5fs_dentry->name, lab5fs_dentry->namelen, flip->f_pos, lab5fs_dentry->inode, DT_REG) < 0)
 				{
 					brelse(bh);
 					unlock_kernel();
@@ -609,9 +609,7 @@ static void lab5fs_put_super(struct super_block *sb)
 	kfree(sb_info);
 	sb->s_fs_info = NULL;
 }
-// static void lab5fs_write_super(struct super_block *sb)
-// {
-// }
+
 int lab5fs_write_inode(struct inode *inode, int unused)
 
 {
