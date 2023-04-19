@@ -573,7 +573,7 @@ done:
 // {
 // }
 
-static void labfs_delete_inode(struct inode *inode)
+static void lab5fs_delete_inode(struct inode *inode)
 {
 	printk("Inside lab5fs_clear_inode\n");
 }
@@ -641,7 +641,7 @@ int lab5fs_write_inode(struct inode *inode, int unused)
 struct super_operations lab5fs_sops = {
 	.read_inode = lab5fs_read_inode,
 	.write_inode = lab5fs_write_inode,
-	.delete_inode = labfs_delete_inode,
+	.delete_inode = lab5fs_delete_inode,
 	.put_super = lab5fs_put_super,
 };
 
