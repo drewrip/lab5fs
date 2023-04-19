@@ -599,6 +599,45 @@ done:
 static void lab5fs_delete_inode(struct inode *inode)
 {
 	printk("Inside lab5fs_clear_inode\n");
+	unsigned long ino = inode->i_ino;
+	struct lab5fs_inode *di;
+	struct buffer_head *bh;
+	int block, off;
+	struct super_block *sb = inode->i_sb;
+	struct lab5fs_sb_info *info = sb->s_fs_info;
+	struct lab5fs_bitmap *b_map;
+	b_map = (struct lab5fs_bitmap *)info->inode_bitmap_bh->b_data;
+
+	if (inode->i_ino < LAB5FS_ROOT_INODE)
+	{
+		printk("lab5fs_delete_inode: invalid inode %lu\n", inode->i_ino);
+		return;
+	}
+
+	inode->i_size = 0;
+	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+	lock_kernel();
+	mark_inode_dirty(inode);
+	block = (ino - LAB5FS_ROOT_INODE) / (LAB5FS_BSIZE / sizeof(struct lab5fs_inode));
+	bh = sb_bread(sb, block);
+	if (!bh)
+	{
+		printk("lab5fs_delete_inode: couldn't to read inode %lu\n", ino);
+		unlock_kernel();
+		return;
+	}
+	off = (ino - LAB5FS_ROOT_INODE) % (LAB5FS_BSIZE / sizeof(struct lab5fs_inode));
+	di = (struct lab5fs_inode *)bh->b_data + off;
+	if (di->i_ino)
+	{
+		clear_bit(di->i_ino, b_map->bitmap);
+	}
+	memset(di, 0, sizeof(struct lab5fs_inode));
+	mark_buffer_dirty(bh);
+	brelse(bh);
+
+	unlock_kernel();
+	clear_inode(inode);
 }
 static void lab5fs_put_super(struct super_block *sb)
 {
