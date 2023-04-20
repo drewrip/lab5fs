@@ -82,8 +82,10 @@ int main(int argc, char *argv[])
     sb.s_blocks_count = block_count;
     sb.s_inodes_count = num_of_inodes_blocks;
     sb.s_free_inodes_count = num_of_inodes_blocks - 1;
-    sb.s_free_blocks_count = block_count;
-    sb.s_first_data_block = num_of_inodes_blocks + INODE_TABLE_BLOCK_NO - 1;
+    sb.s_free_blocks_count = num_of_data_blocks;
+    sb.s_inodes_blocks = INODE_TABLE_BLOCK_NO - 1;
+    sb.s_dentry_blocks = num_of_inodes_blocks + sb.s_inodes_blocks;
+    sb.s_first_data_block = sb.s_dentry_blocks;
     lab5fs_bitmap data_block_bitmap, inode_bitmap;
     struct lab5fs_dir_entry dentry;
     fprintf(stdout, "sb.s_first_data_block is %lu\n", sb.s_first_data_block);
@@ -140,6 +142,7 @@ int main(int argc, char *argv[])
     root_inode.i_ino = LAB5FS_ROOT_INODE;
     root_inode.i_links_count = 2;
     root_inode.i_blocks = 1;
+
     if ((cmp = lseek(fd, offset, SEEK_SET)) < 0 || cmp != offset)
     {
         fprintf(stderr, "Couldn't return to the right offset in file descriptor\n");

@@ -18,18 +18,19 @@
 /* lab5fs superblock layout on disk */
 struct lab5fs_super_block
 {
-    unsigned long s_magic;             /* Magic signature */
-    unsigned long s_inodes_count;      /* Inodes count */
-    unsigned long s_blocks_count;      /* Blocks count */
-    unsigned long s_free_blocks_count; /* Free blocks count */
-    unsigned long s_free_inodes_count; /* Free inodes count */
-    unsigned long s_first_data_block;  /* First Data Block */
-    unsigned long s_block_size;        /* Block size */
-    unsigned long s_blocksize_bits;    /* Blocksize bits */
-
-    unsigned short s_state;                                                                   /* File system state */
-    unsigned short s_inode_size;                                                              /* size of inode structure */
-    char s_reserved[LAB5FS_BSIZE - (8 * sizeof(unsigned long) + 2 * sizeof(unsigned short))]; /* Padding to 1024*/
+    unsigned long s_magic;                                                                     /* Magic signature */
+    unsigned long s_inodes_count;                                                              /* Inodes count */
+    unsigned long s_blocks_count;                                                              /* Blocks count */
+    unsigned long s_free_blocks_count;                                                         /* Free blocks count */
+    unsigned long s_free_inodes_count;                                                         /* Free inodes count */
+    unsigned long s_first_data_block;                                                          /* First Data Block */
+    unsigned long s_block_size;                                                                /* Block size */
+    unsigned long s_blocksize_bits;                                                            /* Blocksize bits */
+    unsigned long s_inodes_blocks;                                                             /* Free data blocks count */
+    unsigned long s_dentry_blocks;                                                             /* Free data blocks count */
+    unsigned short s_state;                                                                    /* File system state */
+    unsigned short s_inode_size;                                                               /* size of inode structure */
+    char s_reserved[LAB5FS_BSIZE - (10 * sizeof(unsigned long) + 2 * sizeof(unsigned short))]; /* Padding to 1024*/
 };
 /*
  * lab5fs in-memory super_block info
@@ -40,34 +41,40 @@ struct lab5fs_sb_info
     unsigned long s_first_data_block; /* First Data Block */
     unsigned long s_blocks_count;     /* Blocks count */
     unsigned long s_fblocks_count;    /* Free data blocks count */
+    unsigned long s_inodes_blocks;    /* Free data blocks count */
+    unsigned long s_dentry_blocks;    /* Free data blocks count */
 };
 /* lab5fs inode layout on disk */
 struct lab5fs_inode
 {
-    unsigned short i_ino;         /* Inode number */
-    unsigned short i_mode;        /* File mode */
-    unsigned short i_uid;         /* Low 16 bits of Owner Uid */
-    unsigned long i_size;         /* Size in bytes */
-    unsigned long i_atime;        /* Access time */
-    unsigned long i_ctime;        /* Creation time */
-    unsigned long i_mtime;        /* Modification time */
-    unsigned long i_dtime;        /* Deletion Time */
-    unsigned short i_gid;         /* Low 16 bits of Group Id */
-    unsigned short i_links_count; /* Links count */
-    unsigned long i_blocks;       /* Blocks count */
-    unsigned long i_flags;        /* File flags */
-    unsigned long i_sblock_data;  /* Starting block of data entries */
-    unsigned long i_eblock_data;  /* Ending block of data entries */
+    unsigned short i_ino;          /* Inode number */
+    unsigned short i_mode;         /* File mode */
+    unsigned short i_uid;          /* Low 16 bits of Owner Uid */
+    unsigned long i_size;          /* Size in bytes */
+    unsigned long i_atime;         /* Access time */
+    unsigned long i_ctime;         /* Creation time */
+    unsigned long i_mtime;         /* Modification time */
+    unsigned long i_dtime;         /* Deletion Time */
+    unsigned short i_gid;          /* Low 16 bits of Group Id */
+    unsigned short i_links_count;  /* Links count */
+    unsigned long i_blocks;        /* Blocks count */
+    unsigned long i_flags;         /* File flags */
+    unsigned long i_sblock_data;   /* Starting block of data entries */
+    unsigned long i_eblock_data;   /* Ending block of data entries */
+    unsigned long i_s_dblock_data; /* Starting block of data entries */
+    unsigned long i_e_dblock_data; /* Ending block of data entries */
 
-    char padding[16]; /* pad up to 64 bytes */
+    char padding[8]; /* pad up to 64 bytes */
 };
 /*
  * lab5fs in-memory inode info
  */
 struct lab5fs_inode_info
 {
-    unsigned long i_sblock_data; /* Starting block of data entries */
-    unsigned long i_eblock_data; /* Ending block of data entries */
+    unsigned long i_sblock_data;   /* Starting block of data entries */
+    unsigned long i_eblock_data;   /* Ending block of data entries */
+    unsigned long i_s_dblock_data; /* Starting block of data entries */
+    unsigned long i_e_dblock_data; /* Ending block of data entries */
 };
 /* lab5fs dentry layout on disk */
 struct lab5fs_dir_entry

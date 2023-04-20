@@ -32,7 +32,7 @@ static int lab5fs_get_block(struct inode *inode, sector_t block,
 	// struct buffer_head *sbh = info->si_sbh;
 	in_info = inode->u.generic_ip;
 	/* Perform block check to ensure we have free blocks to allocate and we are within bounds */
-	if (block < 0 || block > sb_info->s_first_data_block)
+	if (block < 0 || block > sb_info->s_dentry_blocks)
 	{
 		printk("lab5fs_get_block (debug): attempted to allocate memory for invalid blocks\n");
 		return -EIO;
@@ -180,7 +180,9 @@ found_chunk:
 	memcpy(current_lab5fs_de->name, name, namelen);
 
 	/* Update parent inode */
-	parent_inode->i_size += current_lab5fs_de->rec_len;
+	printk("lab5fs_add_entry (debug): before parent assignment stage %lu\n", parent_inode->i_size);
+	if (parent_inode->i_size < current_lab5fs_de->rec_len)
+		parent_inode->i_size += current_lab5fs_de->rec_len;
 	parent_inode->i_mtime = parent_inode->i_ctime = CURRENT_TIME;
 	printk("lab5fs_add_entry (debug): after parent assignment stage\n");
 	/* Mark inode and buffer dirty and return the caller */
@@ -270,7 +272,7 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	}
 	inode->i_nlink = 1;
 	inode->u.generic_ip = in_info;
-	in_info->i_sblock_data = sb_info->s_first_data_block;
+	in_info->i_sblock_data = sb_info->s_dentry_blocks;
 	in_info->i_eblock_data = sb_info->s_blocks_count - 1;
 
 	printk("lab5fs_create (debug): passed inode assignment stage 1\n");
@@ -504,7 +506,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 	while (flip->f_pos < d_ino->i_size)
 	{
 		/* Calculate offset within a lab5fs block */
-		b_offset = flip->f_pos & (LAB5FS_BSIZE - 1);
+		b_offset = flip->f_pos % LAB5FS_BSIZE;
 
 		/* Obtain starting block number for dentries */
 		block_no = in_info->i_sblock_data + (flip->f_pos >> LAB5FS_BSIZE_BITS);
@@ -565,9 +567,9 @@ void lab5fs_read_inode(struct inode *inode)
 	struct lab5fs_inode *di;
 	struct buffer_head *bh;
 	struct lab5fs_inode_info *in_info;
-	struct lab5fs_sb_info *sb_info = (struct lab5fs_sb_info *)inode->i_sb->s_fs_info;
+	struct lab5fs_sb_info *sb_info;
 	int offset, block_no;
-
+	sb_info = inode->i_sb->s_fs_info;
 	if (!inode)
 	{
 		printk("lab5fs_read_inode: attempted to read NULL inode\n");
@@ -609,8 +611,11 @@ void lab5fs_read_inode(struct inode *inode)
 		printk("lab5fs_read_inode: couldn't allocate struct lab5fs_inode_info\n");
 		goto done;
 	}
-	in_info->i_sblock_data = sb_info->s_first_data_block;
-	in_info->i_eblock_data = sb_info->s_blocks_count - in_info->i_sblock_data - 1;
+	in_info->i_sblock_data = sb_info->s_dentry_blocks;
+	in_info->i_eblock_data = sb_info->s_inodes_blocks - 1;
+
+	in_info->i_s_dblock_data = sb_info->s_first_data_block;
+	in_info->i_e_dblock_data = sb_info->s_blocks_count + 3;
 
 	inode->u.generic_ip = in_info;
 	inode->i_uid = di->i_uid;
@@ -805,9 +810,10 @@ static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 	}
 
 	sb_info->inode_bitmap_bh = bh_bitmap;
-	sb_info->s_first_data_block = lb5_sb->s_first_data_block;
+	sb_info->s_dentry_blocks = lb5_sb->s_dentry_blocks;
 	sb_info->s_blocks_count = lb5_sb->s_blocks_count;
-	sb_info->s_fblocks_count = sb_info->s_blocks_count;
+	sb_info->s_fblocks_count = lb5_sb->s_blocks_count;
+	sb_info->s_blocks_count = lb5_sb->s_blocks_count;
 
 	sb->s_magic = LAB5FS_MAGIC;
 	sb->s_op = &lab5fs_sops;
