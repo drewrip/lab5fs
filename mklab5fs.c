@@ -9,7 +9,7 @@
 
 #include "lab5fs.h"
 
-int validate_image(const char *pathname, unsigned long *block_count)
+int validate_image(const char *pathname, unsigned long *block_count, unsigned long *num_of_inodes_blocks, unsigned long *num_of_dentry_blocks, unsigned long *num_of_data_blocks)
 {
     struct stat image_stat;
     int res;
@@ -21,12 +21,22 @@ int validate_image(const char *pathname, unsigned long *block_count)
     }
     /* Let's get the number blocks in the device */
     *block_count = (image_stat.st_size / LAB5FS_BSIZE) - 3;
+    /* Ensure that we have the right number of blocks and can support at least 8 MB of data */
     if (!(*block_count))
         return -1;
+    *num_of_inodes_blocks = *block_count >> 4;       /* at least 512 blocks for inodes */
+    *num_of_dentry_blocks = (*block_count >> 3) * 3; /* at least at least 3072 blocks for dentries */
+    *num_of_data_blocks = *block_count - *num_of_inodes_blocks - *num_of_dentry_blocks;
+    /* Each block is 1024 bytes, so if we don't have 8K of them, the image is invalid */
+    if (*num_of_data_blocks >> LAB5FS_BSIZE_BITS < 8)
+    {
+        fprintf(stderr, "mkfs_lab5fs: image must be able to support at least 8MB of data\n");
+        return -1;
+    }
     /* Ensure image has right permissions */
     if (res = access(pathname, W_OK))
     {
-        fprintf(stderr, "Device isn't writeable\n");
+        fprintf(stderr, "mkfs_lab5fs: device isn't writeable\n");
         return res;
     }
     return 0;
@@ -34,7 +44,7 @@ int validate_image(const char *pathname, unsigned long *block_count)
 int main(int argc, char *argv[])
 {
     int fd, res, cmp;
-    unsigned long block_count, max_num_of_inodes;
+    unsigned long block_count, num_of_inodes_blocks, num_of_dentry_blocks, num_of_data_blocks;
     struct timespec now;
     struct lab5fs_super_block sb;
     struct lab5fs_inode root_inode;
@@ -48,13 +58,13 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
     /* Validate image/device and obtain the number of blocks in the image */
-    if (validate_image(argv[1], &block_count))
+    if (validate_image(argv[1], &block_count, &num_of_inodes_blocks, &num_of_dentry_blocks, &num_of_data_blocks))
         exit(EXIT_FAILURE);
     /* Obtain the max number of nodes for this device.
      * Will need to change block_count - 3
      * based on how many blocks are used for other purposes than inodes */
-    max_num_of_inodes = (int)((double)block_count * block_ino_ratio);
-    fprintf(stdout, "max num of inodes is %lu and block_count is %lu\n", max_num_of_inodes, block_count);
+    num_of_inodes_blocks = (int)((double)block_count * block_ino_ratio);
+    fprintf(stdout, "max num of inodes is %lu and block_count is %lu\n", num_of_inodes_blocks, block_count);
     // Open device or file
     fd = open(argv[1], O_WRONLY | O_EXCL);
     if (fd < 0)
@@ -70,10 +80,10 @@ int main(int argc, char *argv[])
     sb.s_blocksize_bits = LAB5FS_BSIZE_BITS;
     sb.s_inode_size = sizeof(struct lab5fs_inode);
     sb.s_blocks_count = block_count;
-    sb.s_inodes_count = max_num_of_inodes;
-    sb.s_free_inodes_count = max_num_of_inodes - 1;
+    sb.s_inodes_count = num_of_inodes_blocks;
+    sb.s_free_inodes_count = num_of_inodes_blocks - 1;
     sb.s_free_blocks_count = block_count;
-    sb.s_first_data_block = max_num_of_inodes + INODE_TABLE_BLOCK_NO - 1;
+    sb.s_first_data_block = num_of_inodes_blocks + INODE_TABLE_BLOCK_NO - 1;
     lab5fs_bitmap data_block_bitmap, inode_bitmap;
     struct lab5fs_dir_entry dentry;
     fprintf(stdout, "sb.s_first_data_block is %lu\n", sb.s_first_data_block);
@@ -145,7 +155,7 @@ int main(int argc, char *argv[])
     offset += res;
     printf("Finished writing %lu bytes to device's root inode\n", res);
     /* Update offset to write in data blocks, so skip inode tables */
-    offset += (LAB5FS_BSIZE - res) + (max_num_of_inodes - 2) * LAB5FS_BSIZE;
+    offset += (LAB5FS_BSIZE - res) + (num_of_inodes_blocks - 2) * LAB5FS_BSIZE;
     printf("New offset is %lu\n", offset);
     if ((cmp = lseek(fd, offset, SEEK_SET)) < 0 || cmp != offset)
     {
@@ -194,7 +204,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Couldn't close device and received error number %d\n", res);
         exit(EXIT_FAILURE);
     }
-    printf("lab5fs created on %s\n", argv[1]);
+    printf("mkfs_lab5fs: lab5fs created on %s\n", argv[1]);
 
     return 0;
 }

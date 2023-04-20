@@ -24,21 +24,55 @@ static int lab5fs_get_block(struct inode *inode, sector_t block,
 							struct buffer_head *bh_result, int create)
 {
 	printk("lab5fs_get_block (debug): inside lab5fs_get_block\n");
-	long phys;
+	long disk_block;
 	int err;
 	struct super_block *sb = inode->i_sb;
-	struct lab5fs_sb_info *info = sb->s_fs_info;
-	struct lab5fs_inode_info *info_in;
+	struct lab5fs_sb_info *sb_info = sb->s_fs_info;
+	struct lab5fs_inode_info *in_info;
 	// struct buffer_head *sbh = info->si_sbh;
-	info_in = inode->u.generic_ip;
-
-	if (block < 0 || block > info->s_first_data_block)
+	in_info = inode->u.generic_ip;
+	/* Perform block check to ensure we have free blocks to allocate and we are within bounds */
+	if (block < 0 || block > sb_info->s_first_data_block)
+	{
+		printk("lab5fs_get_block (debug): attempted to allocate memory for invalid blocks\n");
 		return -EIO;
+	}
+	/* Obtain the desired block mapping */
+	disk_block = in_info->i_sblock_data + block;
+	/* Handle first case where create == 0*/
+	if (create)
+	{
+		if (disk_block <= in_info->i_eblock_data)
+		{
+			printk("lab5fs_get_block: mapping requesting block to buffer\n");
+			map_bh(bh_result, sb, disk_block + 1);
+			return 0;
+		}
+		printk("lab5fs_get_block (debug): unable to find space for block allocation\n");
+		return -ENOSPC;
+	}
+	/* Handle second case where create is non-zero.
+	 *  Start firt case where we can still use the pre-allocated blocks without having to add more.
+	 */
+	if (inode->i_size && disk_block <= in_info->i_eblock_data)
+	{
+		printk("lab5fs_get_block: mapping requesting block to buffer\n");
+		map_bh(bh_result, sb, disk_block);
+		return 0;
+	}
+	/* Ensure that there are free blocks that we can use */
+	if (!(sb_info->s_fblocks_count))
+	{
+		printk("lab5fs_get_block (debug): unable to find space for block allocation\n");
+		return -ENOSPC;
+	}
+	/* If we get here, then we're good to start allocating blocks */
+	// lock_kernel();
+	inode->i_blocks += 1;
+	mark_inode_dirty(inode);
+	// map_bh(bh_result, sb, 500);
 
-	phys = info_in->i_sblock_data + block;
-	map_bh(bh_result, sb, 500);
-
-	printk("lab5fs_get_block (debug): leaving lab5fs_get_block\n");
+	printk("lab5fs_get_block (debug): leaving lab5fs_get_block after allocating blocks\n");
 	return 0;
 }
 static int lab5fs_readpage(struct file *file, struct page *page)
@@ -146,7 +180,7 @@ found_chunk:
 	memcpy(current_lab5fs_de->name, name, namelen);
 
 	/* Update parent inode */
-	parent_inode->i_size += current_lab5fs_de->rec_len;
+
 	parent_inode->i_mtime = parent_inode->i_ctime = CURRENT_TIME;
 	printk("lab5fs_add_entry (debug): after parent assignment stage\n");
 	/* Mark inode and buffer dirty and return the caller */
@@ -202,7 +236,7 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 		return -1;
 	}
 	printk("lab5fs_create (debug): passed bitmap block stage\n");
-	ino = find_first_zero_bit(b_map->bitmap, LAB5FS_BITMAP_SIZE);
+	ino = find_first_zero_bit(b_map->bitmap, LAB5FS_BSIZE);
 	printk("lab5fs_create (debug): passed bitmap block bit set\n");
 	if (ino > LAB5FS_BSIZE)
 	{
@@ -216,13 +250,9 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	set_bit(ino, b_map->bitmap);
 	mark_buffer_dirty(bh_bitmap);
 	inode->i_mode = mode;
+	inode->i_blocks = inode->i_blksize = 0;
 	inode->i_ino = ino;
-	inode->i_size = 0;
-	inode->i_blocks = 0;
 	inode->i_sb = sb;
-	inode->i_blksize = LAB5FS_BSIZE;
-	inode->i_blkbits = LAB5FS_BSIZE_BITS;
-
 	inode->i_uid = current->fsuid;
 	inode->i_gid = current->fsgid;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
@@ -474,7 +504,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 	while (flip->f_pos < d_ino->i_size)
 	{
 		/* Calculate offset within a lab5fs block */
-		b_offset = flip->f_pos % LAB5FS_BSIZE;
+		b_offset = flip->f_pos & (LAB5FS_BSIZE - 1);
 
 		/* Obtain starting block number for dentries */
 		block_no = in_info->i_sblock_data + (flip->f_pos >> LAB5FS_BSIZE_BITS);
@@ -703,6 +733,7 @@ int lab5fs_write_inode(struct inode *inode, int unused)
 	//		di->i_vtype = LAB5FS_VREG;
 
 	di->i_ino = inode->i_ino;
+	di->i_size = inode->i_size;
 	di->i_mode = inode->i_mode;
 	di->i_uid = inode->i_uid;
 	di->i_gid = inode->i_gid;
@@ -710,6 +741,8 @@ int lab5fs_write_inode(struct inode *inode, int unused)
 	di->i_atime = inode->i_atime.tv_sec;
 	di->i_mtime = inode->i_mtime.tv_sec;
 	di->i_ctime = inode->i_ctime.tv_sec;
+	di->i_blocks = inode->i_blocks;
+
 	// di->i_sblock_data = LAB5FS_I(inode)->i_sblock_data;
 	// di->i_eblock_data = LAB5FS_I(inode)->i_eblock_data;
 	// di->i_eoffset = di->i_sblock_data * LAB5FS_BSIZE + inode->i_size - 1;
@@ -774,6 +807,7 @@ static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 	sb_info->inode_bitmap_bh = bh_bitmap;
 	sb_info->s_first_data_block = lb5_sb->s_first_data_block;
 	sb_info->s_blocks_count = lb5_sb->s_blocks_count;
+	sb_info->s_fblocks_count = sb_info->s_blocks_count;
 
 	sb->s_magic = LAB5FS_MAGIC;
 	sb->s_op = &lab5fs_sops;
