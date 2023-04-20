@@ -24,7 +24,21 @@ static int lab5fs_get_block(struct inode *inode, sector_t block,
 							struct buffer_head *bh_result, int create)
 {
 	printk("lab5fs_get_block (debug): inside lab5fs_get_block\n");
+	long phys;
+	int err;
+	struct super_block *sb = inode->i_sb;
+	struct lab5fs_sb_info *info = sb->s_fs_info;
+	struct lab5fs_inode_info *info_in;
+	// struct buffer_head *sbh = info->si_sbh;
+	info_in = inode->u.generic_ip;
 
+	if (block < 0 || block > info->s_first_data_block)
+		return -EIO;
+
+	phys = info_in->i_sblock_data + block;
+	map_bh(bh_result, sb, 500);
+
+	printk("lab5fs_get_block (debug): leaving lab5fs_get_block\n");
 	return 0;
 }
 static int lab5fs_readpage(struct file *file, struct page *page)
@@ -663,7 +677,6 @@ int lab5fs_write_inode(struct inode *inode, int unused)
 	struct buffer_head *bh;
 	int block, off;
 
-
 	if (ino < LAB5FS_ROOT_INODE)
 	{
 		printk("bad inode number\n");
@@ -680,7 +693,7 @@ int lab5fs_write_inode(struct inode *inode, int unused)
 		return -EIO;
 	}
 
-	off = (ino - LAB5FS_ROOT_INODE) % (LAB5FS_BSIZE / sizeof(struct lab5fs_inode)); 
+	off = (ino - LAB5FS_ROOT_INODE) % (LAB5FS_BSIZE / sizeof(struct lab5fs_inode));
 	printk("lab5fs_write_inode: writing offset=%lu\n", off);
 	di = (struct lab5fs_inode *)bh->b_data + off;
 
