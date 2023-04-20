@@ -132,7 +132,7 @@ found_chunk:
 	memcpy(current_lab5fs_de->name, name, namelen);
 
 	/* Update parent inode */
-
+	parent_inode->i_size += current_lab5fs_de->rec_len;
 	parent_inode->i_mtime = parent_inode->i_ctime = CURRENT_TIME;
 	printk("lab5fs_add_entry (debug): after parent assignment stage\n");
 	/* Mark inode and buffer dirty and return the caller */
@@ -460,7 +460,7 @@ static int lab5fs_readdir(struct file *flip, void *dirent, filldir_t filldir)
 	while (flip->f_pos < d_ino->i_size)
 	{
 		/* Calculate offset within a lab5fs block */
-		b_offset = flip->f_pos & (LAB5FS_BSIZE - 1);
+		b_offset = flip->f_pos % LAB5FS_BSIZE;
 
 		/* Obtain starting block number for dentries */
 		block_no = in_info->i_sblock_data + (flip->f_pos >> LAB5FS_BSIZE_BITS);
