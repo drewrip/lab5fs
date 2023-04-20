@@ -38,6 +38,7 @@ struct lab5fs_super_block
 struct lab5fs_sb_info
 {
     struct buffer_head *inode_bitmap_bh;
+    struct buffer_head *data_bitmap_bh;
     unsigned long s_first_data_block; /* First Data Block */
     unsigned long s_blocks_count;     /* Blocks count */
     unsigned long s_fblocks_count;    /* Free data blocks count */

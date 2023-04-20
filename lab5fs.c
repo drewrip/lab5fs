@@ -23,55 +23,78 @@ MODULE_LICENSE("GPL");
 static int lab5fs_get_block(struct inode *inode, sector_t block,
 							struct buffer_head *bh_result, int create)
 {
-	printk("lab5fs_get_block (debug): inside lab5fs_get_block\n");
+	printk("lab5fs_get_block (debug): inside lab5fs_get_block where create is %d\n", create);
 	long disk_block;
 	int err;
+	unsigned long first_block;
 	struct super_block *sb = inode->i_sb;
 	struct lab5fs_sb_info *sb_info = sb->s_fs_info;
 	struct lab5fs_inode_info *in_info;
-	// struct buffer_head *sbh = info->si_sbh;
+	struct buffer_head *bh_bitmap;
+	struct lab5fs_bitmap *b_map;
 	in_info = inode->u.generic_ip;
+	printk("lab5fs_get_block (debug): passed assignment\n");
 	/* Perform block check to ensure we have free blocks to allocate and we are within bounds */
-	if (block < 0 || block > sb_info->s_dentry_blocks)
+	if (block < 0 || block > sb_info->s_blocks_count + sb_info->s_first_data_block)
 	{
 		printk("lab5fs_get_block (debug): attempted to allocate memory for invalid blocks\n");
 		return -EIO;
 	}
+	printk("lab5fs_get_block (debug): passed first if\n");
 	/* Obtain the desired block mapping */
-	disk_block = in_info->i_sblock_data + block;
+	disk_block = in_info->i_s_dblock_data + block;
 	/* Handle first case where create == 0*/
-	if (create)
+	if (!create)
 	{
-		if (disk_block <= in_info->i_eblock_data)
+		if (disk_block <= in_info->i_e_dblock_data)
 		{
-			printk("lab5fs_get_block: mapping requesting block to buffer\n");
-			map_bh(bh_result, sb, disk_block + 1);
+			printk("lab5fs_get_block: mapping requested block to buffer\n");
+			map_bh(bh_result, sb, disk_block);
 			return 0;
 		}
 		printk("lab5fs_get_block (debug): unable to find space for block allocation\n");
 		return -ENOSPC;
 	}
+	printk("lab5fs_get_block (debug): passed second if\n");
 	/* Handle second case where create is non-zero.
 	 *  Start firt case where we can still use the pre-allocated blocks without having to add more.
 	 */
-	if (inode->i_size && disk_block <= in_info->i_eblock_data)
+	if (inode->i_size && disk_block <= in_info->i_e_dblock_data)
 	{
 		printk("lab5fs_get_block: mapping requesting block to buffer\n");
 		map_bh(bh_result, sb, disk_block);
 		return 0;
 	}
+	printk("lab5fs_get_block (debug): passed third if\n");
 	/* Ensure that there are free blocks that we can use */
 	if (!(sb_info->s_fblocks_count))
 	{
 		printk("lab5fs_get_block (debug): unable to find space for block allocation\n");
 		return -ENOSPC;
 	}
+	printk("lab5fs_get_block (debug): passed fourth if\n");
 	/* If we get here, then we're good to start allocating blocks */
 	// lock_kernel();
+	bh_bitmap = sb_info->data_bitmap_bh;
+	b_map = ((struct lab5fs_bitmap *)(bh_bitmap->b_data));
+	/* Check that we have available blocks */
+	first_block = find_first_zero_bit(b_map->bitmap, LAB5FS_BSIZE);
+	if (first_block == sizeof(unsigned long) * 8)
+	{
+		printk("lab5fs_get_block (debug): unable to find space for block allocation\n");
+		return -ENOSPC;
+	}
+	printk("lab5fs_get_block (debug): passed fifth if\n");
+	/* Let mark the bit */
+	set_bit(first_block, b_map->bitmap);
+	printk("lab5fs_get_block (debug): set bit\n");
+	mark_buffer_dirty(bh_bitmap);
+	printk("lab5fs_get_block (debug): marked dirty buffer\n");
 	inode->i_blocks += 1;
+	printk("lab5fs_get_block (debug): updated block count\n");
 	mark_inode_dirty(inode);
-	// map_bh(bh_result, sb, 500);
-
+	printk("lab5fs_get_block (debug): marked inode dirty block count\n");
+	map_bh(bh_result, sb, sb_info->s_first_data_block + first_block);
 	printk("lab5fs_get_block (debug): leaving lab5fs_get_block after allocating blocks\n");
 	return 0;
 }
@@ -275,6 +298,8 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	in_info->i_sblock_data = sb_info->s_dentry_blocks;
 	in_info->i_eblock_data = sb_info->s_blocks_count - 1;
 
+	in_info->i_s_dblock_data = sb_info->s_first_data_block;
+	in_info->i_e_dblock_data = sb_info->s_blocks_count - 1;
 	printk("lab5fs_create (debug): passed inode assignment stage 1\n");
 	insert_inode_hash(inode);
 	mark_inode_dirty(inode);
@@ -700,6 +725,7 @@ static void lab5fs_put_super(struct super_block *sb)
 	struct lab5fs_sb_info *sb_info = sb->s_fs_info;
 	/* Release resources */
 	brelse(sb_info->inode_bitmap_bh);
+	brelse(sb_info->data_bitmap_bh);
 	kfree(sb_info);
 	sb->s_fs_info = NULL;
 }
@@ -767,7 +793,7 @@ struct super_operations lab5fs_sops = {
 
 static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 {
-	struct buffer_head *bh, *bh_bitmap = NULL;
+	struct buffer_head *bh, *bh_bitmap = NULL, *bh_data_bitmap = NULL;
 	struct lab5fs_super_block *lb5_sb;
 	struct inode *root_inode;
 	struct lab5fs_sb_info *sb_info;
@@ -808,12 +834,18 @@ static int lab5fs_fill_super(struct super_block *sb, void *data, int silent)
 		printk(KERN_ERR "lab5fs: couldn't read inode bitmap from disk.\n");
 		goto failed_sbi;
 	}
-
+	if (!(bh_data_bitmap = sb_bread(sb, INODE_BITMAP_BLOCK_NO + 1)))
+	{
+		printk(KERN_ERR "lab5fs: couldn't read data bitmap from disk.\n");
+		goto failed_sbi;
+	}
 	sb_info->inode_bitmap_bh = bh_bitmap;
+	sb_info->data_bitmap_bh = bh_data_bitmap;
 	sb_info->s_dentry_blocks = lb5_sb->s_dentry_blocks;
 	sb_info->s_blocks_count = lb5_sb->s_blocks_count;
 	sb_info->s_fblocks_count = lb5_sb->s_blocks_count;
 	sb_info->s_blocks_count = lb5_sb->s_blocks_count;
+	sb_info->s_first_data_block = lb5_sb->s_first_data_block;
 
 	sb->s_magic = LAB5FS_MAGIC;
 	sb->s_op = &lab5fs_sops;
