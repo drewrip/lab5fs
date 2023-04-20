@@ -180,7 +180,7 @@ found_chunk:
 	memcpy(current_lab5fs_de->name, name, namelen);
 
 	/* Update parent inode */
-
+	parent_inode->i_size += current_lab5fs_de->rec_len;
 	parent_inode->i_mtime = parent_inode->i_ctime = CURRENT_TIME;
 	printk("lab5fs_add_entry (debug): after parent assignment stage\n");
 	/* Mark inode and buffer dirty and return the caller */
