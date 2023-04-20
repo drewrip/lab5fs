@@ -33,14 +33,13 @@ static int lab5fs_get_block(struct inode *inode, sector_t block,
 	struct buffer_head *bh_bitmap;
 	struct lab5fs_bitmap *b_map;
 	in_info = inode->u.generic_ip;
-	printk("lab5fs_get_block (debug): passed assignment\n");
+
 	/* Perform block check to ensure we have free blocks to allocate and we are within bounds */
 	if (block < 0 || block > sb_info->s_blocks_count + sb_info->s_first_data_block)
 	{
 		printk("lab5fs_get_block (debug): attempted to allocate memory for invalid blocks\n");
 		return -EIO;
 	}
-	printk("lab5fs_get_block (debug): passed first if\n");
 	/* Obtain the desired block mapping */
 	disk_block = in_info->i_s_dblock_data + block;
 	/* Handle first case where create == 0*/
@@ -55,7 +54,6 @@ static int lab5fs_get_block(struct inode *inode, sector_t block,
 		printk("lab5fs_get_block (debug): unable to find space for block allocation\n");
 		return -ENOSPC;
 	}
-	printk("lab5fs_get_block (debug): passed second if\n");
 	/* Handle second case where create is non-zero.
 	 *  Start firt case where we can still use the pre-allocated blocks without having to add more.
 	 */
@@ -65,14 +63,12 @@ static int lab5fs_get_block(struct inode *inode, sector_t block,
 		map_bh(bh_result, sb, disk_block);
 		return 0;
 	}
-	printk("lab5fs_get_block (debug): passed third if\n");
 	/* Ensure that there are free blocks that we can use */
 	if (!(sb_info->s_fblocks_count))
 	{
 		printk("lab5fs_get_block (debug): unable to find space for block allocation\n");
 		return -ENOSPC;
 	}
-	printk("lab5fs_get_block (debug): passed fourth if\n");
 	/* If we get here, then we're good to start allocating blocks */
 	// lock_kernel();
 	bh_bitmap = sb_info->data_bitmap_bh;
@@ -84,16 +80,15 @@ static int lab5fs_get_block(struct inode *inode, sector_t block,
 		printk("lab5fs_get_block (debug): unable to find space for block allocation\n");
 		return -ENOSPC;
 	}
-	printk("lab5fs_get_block (debug): passed fifth if\n");
+
 	/* Let mark the bit */
 	set_bit(first_block, b_map->bitmap);
-	printk("lab5fs_get_block (debug): set bit\n");
 	mark_buffer_dirty(bh_bitmap);
-	printk("lab5fs_get_block (debug): marked dirty buffer\n");
 	inode->i_blocks += 1;
-	printk("lab5fs_get_block (debug): updated block count\n");
+	in_info->i_s_dblock_data = sb_info->s_first_data_block + first_block;
+	in_info->i_e_dblock_data = in_info->i_e_dblock_data + 1;
 	mark_inode_dirty(inode);
-	printk("lab5fs_get_block (debug): marked inode dirty block count\n");
+	sb_info->s_blocks_count--;
 	map_bh(bh_result, sb, sb_info->s_first_data_block + first_block);
 	printk("lab5fs_get_block (debug): leaving lab5fs_get_block after allocating blocks\n");
 	return 0;
@@ -298,8 +293,8 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 	in_info->i_sblock_data = sb_info->s_dentry_blocks;
 	in_info->i_eblock_data = sb_info->s_blocks_count - 1;
 
-	in_info->i_s_dblock_data = sb_info->s_first_data_block;
-	in_info->i_e_dblock_data = sb_info->s_blocks_count - 1;
+	in_info->i_s_dblock_data = in_info->i_e_dblock_data = 0;
+
 	printk("lab5fs_create (debug): passed inode assignment stage 1\n");
 	insert_inode_hash(inode);
 	mark_inode_dirty(inode);
@@ -682,9 +677,12 @@ static void lab5fs_delete_inode(struct inode *inode)
 	struct super_block *sb = inode->i_sb;
 	struct lab5fs_sb_info *sb_info = sb->s_fs_info;
 	struct buffer_head *bh_bitmap = sb_info->inode_bitmap_bh;
-	struct lab5fs_bitmap *b_map;
+	struct buffer_head *bh_data_bitmap = sb_info->data_bitmap_bh;
+	struct lab5fs_bitmap *b_map, *b_data_map;
 	int block_no, offset;
+	unsigned long i;
 	b_map = (struct lab5fs_bitmap *)bh_bitmap->b_data;
+	b_data_map = (struct lab5fs_bitmap *)bh_data_bitmap->b_data;
 
 	if (ino < LAB5FS_ROOT_INODE)
 	{
@@ -706,10 +704,21 @@ static void lab5fs_delete_inode(struct inode *inode)
 	}
 	offset = (ino - LAB5FS_ROOT_INODE) % (LAB5FS_BSIZE / sizeof(struct lab5fs_inode));
 	lab5fs_in = (struct lab5fs_inode *)bh->b_data + offset;
+	i = lab5fs_in->i_sblock_data;
 	if (lab5fs_in->i_ino)
 	{
 		clear_bit(lab5fs_in->i_ino, b_map->bitmap);
 		mark_buffer_dirty(bh_bitmap);
+	}
+	/* If we had data, free it */
+	if (lab5fs_in->i_sblock_data)
+	{
+		for (; i < lab5fs_in->i_eblock_data; i++)
+		{
+			clear_bit(i, b_data_map->bitmap);
+		}
+
+		mark_buffer_dirty(b_data_map);
 	}
 	/* Zerop out the content of the inode */
 	memset(lab5fs_in, 0, sizeof(struct lab5fs_inode));
