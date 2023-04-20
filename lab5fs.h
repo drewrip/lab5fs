@@ -2,9 +2,10 @@
 #define _LAB5FS_FS_H
 #define LAB5FS_BSIZE_BITS 10
 #define LAB5FS_BSIZE (1 << LAB5FS_BSIZE_BITS) /* 1024 bytes per block*/
+#define LAB5FS_BITMAP_SIZE (LAB5FS_BSIZE << 2) /* Uses 4 blocks for bitmap */
 #define LAB5FS_INODES_PER_BLOCK 8
 #define LAB5FS_MAGIC 0xCAFED00D
-#define INODE_TABLE_BLOCK_NO 3
+#define INODE_TABLE_BLOCK_NO (INODE_BITMAP_BLOCK_NO + 4)
 #define INODE_BITMAP_BLOCK_NO 2
 #define MAX_FILE_NAME_LENGTH 255
 #define SIZE_OF_DIR_MINUS_NAME 8
@@ -89,12 +90,12 @@ enum
 /* Define bitmap structure for lab5fs */
 typedef struct lab5fs_bitmap
 {
-    unsigned long bitmap[LAB5FS_BSIZE >> 2];
+    unsigned long bitmap[LAB5FS_BSIZE];
 } lab5fs_bitmap;
 /* Define block allocation bitmap structure for dir entries in lab5fs */
 typedef struct
 {
-    unsigned long block_map[LAB5FS_BSIZE >> 2]; /* Maps 256 inodes in one block */
+    unsigned long block_map[LAB5FS_BSIZE]; /* Maps 1024 inodes using 4 blocks */
 } lab5fs_block_map;
 /* lab5fs.c */
 extern struct inode_operations lab5fs_file_inops;
