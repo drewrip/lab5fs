@@ -188,7 +188,7 @@ static int lab5fs_create(struct inode *dir, struct dentry *dentry, int mode, str
 		return -1;
 	}
 	printk("lab5fs_create (debug): passed bitmap block stage\n");
-	ino = find_first_zero_bit(b_map->bitmap, LAB5FS_BITMAP_SIZE);
+	ino = find_first_zero_bit(b_map->bitmap, LAB5FS_BSIZE);
 	printk("lab5fs_create (debug): passed bitmap block bit set\n");
 	if (ino > LAB5FS_BSIZE)
 	{
